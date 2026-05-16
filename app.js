@@ -1414,27 +1414,41 @@ async function filterDiscover(query) {
 // USER LISTS & MODALS
 // =====================================================
 
-function openUserListModal(type) {
+async function openUserListModal(type) {
   const modal = document.getElementById('user-list-modal');
   const title = document.getElementById('user-list-title');
   const content = document.getElementById('user-list-content');
+  const mySession = JSON.parse(localStorage.getItem('privateai_session'));
 
   modal.style.display = 'flex';
-  content.innerHTML = '';
+  content.innerHTML = '<div class="loading-spinner" style="margin:40px auto;"></div>';
 
-  if (type === 'following') {
-    title.textContent = 'Following';
-    const following = mockDiscoverUsers.filter(u => followingSet.has(u.id));
-    if (following.length === 0) {
-      content.innerHTML = '<div style="padding:40px; text-align:center; color:var(--text-secondary);">You are not following anyone yet.</div>';
+  try {
+    let usersToShow = [];
+    if (type === 'following') {
+      title.textContent = 'Following';
+      // Find people I follow in the discover source
+      usersToShow = realDiscoverSource.filter(u => followingSet.has(u.id));
     } else {
-      following.forEach(user => appendUserToModalList(user, content));
+      title.textContent = 'Followers';
+      // Search cloud for people who follow ME
+      if (db && mySession) {
+        const snapshot = await db.collection('notifications').where('to', '==', mySession.uid).where('type', '==', 'follow').get();
+        const followerIds = new Set();
+        snapshot.forEach(doc => followerIds.add(doc.data().from));
+        usersToShow = realDiscoverSource.filter(u => followerIds.has(u.id));
+      }
     }
-  } else {
-    title.textContent = 'Followers';
-    // Mock some followers (subset of discover users + some random ones)
-    const followers = mockDiscoverUsers.slice(0, 5);
-    followers.forEach(user => appendUserToModalList(user, content));
+
+    content.innerHTML = '';
+    if (usersToShow.length === 0) {
+      content.innerHTML = `<div style="padding:40px; text-align:center; color:var(--text-secondary);">No ${type} yet.</div>`;
+    } else {
+      usersToShow.forEach(user => appendUserToModalList(user, content));
+    }
+  } catch (e) {
+    console.error("Failed to load list:", e);
+    content.innerHTML = '<div style="padding:40px; text-align:center;">Error loading list.</div>';
   }
 }
 
@@ -1860,6 +1874,7 @@ window.toggleFollow = toggleFollow;
 window.filterDiscover = filterDiscover;
 window.openOtherProfile = openOtherProfile;
 window.startChatFromProfile = startChatFromProfile;
+window.openUserListModal = openUserListModal;
 
 // Start App — check auth first
 window.onload = () => {
