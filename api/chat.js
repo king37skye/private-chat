@@ -25,8 +25,8 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Using native global fetch (available in Vercel Node 18+)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+    // Using gemini-1.5-flash which is much more stable for free accounts
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
