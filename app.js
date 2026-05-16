@@ -1,4 +1,4 @@
-// Firebase Configuration (Public Relay for Testing)
+﻿// Firebase Configuration (Public Relay for Testing)
 const firebaseConfig = {
   apiKey: "AIzaSyBkaE1Zk4XQ4m8a6NzjGFadnA1oSwNkbvo",
   authDomain: "private-chat-71258.firebaseapp.com",
@@ -14,9 +14,9 @@ let db;
 try {
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
-  console.log("✅ Firebase Relay connected.");
+  console.log("âœ… Firebase Relay connected.");
 } catch (e) {
-  console.error("❌ Firebase failed to initialize. Using offline mock mode.");
+  console.error("âŒ Firebase failed to initialize. Using offline mock mode.");
 }
 
 // =====================================================
@@ -27,27 +27,32 @@ let authMode = 'login';   // 'login' | 'signup'
 let authMethod = 'email'; // 'email' | 'phone'
 let pendingPhone = '';
 
-// Called on page load — check if session exists
+// Called on page load â€” check if session exists
 function checkAuthSession() {
-  firebase.auth().onAuthStateChanged((user) => {
-    if (user) {
-      // User is signed in
-      const userData = { 
-        uid: user.uid,
-        email: user.email, 
-        name: user.displayName || 'User', 
-        photo: user.photoURL 
-      };
-      localStorage.setItem('privateai_session', JSON.stringify(userData));
-      unlockApp(false);
-    } else {
-      // User is signed out
-      localStorage.removeItem('privateai_session');
-      document.getElementById('app-container').classList.add('app-locked');
-      document.getElementById('auth-screen').style.display = 'flex';
-      document.getElementById('auth-screen').classList.remove('fade-out');
-    }
-  });
+  console.log("ðŸ›¡ï¸ Initializing Auth Listener...");
+  try {
+    firebase.auth().onAuthStateChanged((user) => {
+      if (user) {
+        console.log("âœ… User detected:", user.email);
+        const userData = { 
+          uid: user.uid,
+          email: user.email, 
+          name: user.displayName || user.email.split('@')[0], 
+          photo: user.photoURL 
+        };
+        localStorage.setItem('privateai_session', JSON.stringify(userData));
+        unlockApp(false);
+      } else {
+        console.log("ðŸ‘¤ No active session.");
+        localStorage.removeItem('privateai_session');
+        document.getElementById('app-container').classList.add('app-locked');
+        document.getElementById('auth-screen').style.display = 'flex';
+        document.getElementById('auth-screen').classList.remove('fade-out');
+      }
+    });
+  } catch (err) {
+    console.error("ðŸš¨ Auth system failed to start:", err);
+  }
 }
 
 // Unlock the app and dismiss auth screen
@@ -106,30 +111,31 @@ function submitEmailAuth() {
   const name = document.getElementById('auth-name').value.trim();
   const errEl = document.getElementById('auth-error-email');
   const btn = document.getElementById('auth-submit-email');
+  const btnText = document.getElementById('auth-submit-email-text');
 
   errEl.textContent = '';
   if (!email || !password) { errEl.textContent = 'Email and password required.'; return; }
   
   btn.disabled = true;
-  const originalText = document.getElementById('auth-submit-email-text').textContent;
-  document.getElementById('auth-submit-email-text').textContent = 'Securing...';
+  const originalText = btnText.textContent;
+  btnText.textContent = 'Securing...';
 
   if (authMode === 'signup') {
     firebase.auth().createUserWithEmailAndPassword(email, password)
       .then((userCredential) => {
-        if (name) userCredential.user.updateProfile({ displayName: name });
+        if (name) return userCredential.user.updateProfile({ displayName: name });
       })
       .catch((error) => {
         errEl.textContent = error.message;
         btn.disabled = false;
-        document.getElementById('auth-submit-email-text').textContent = originalText;
+        btnText.textContent = originalText;
       });
   } else {
     firebase.auth().signInWithEmailAndPassword(email, password)
       .catch((error) => {
         errEl.textContent = error.message;
         btn.disabled = false;
-        document.getElementById('auth-submit-email-text').textContent = originalText;
+        btnText.textContent = originalText;
       });
   }
 }
@@ -239,12 +245,12 @@ CRITICAL PRIVACY RULES:
 - You must NEVER store or log any user data.
 
 WHAT YOU MUST ALWAYS DO:
-- When the user shares message content WITH YOU directly in this conversation, you MUST analyze it, summarize it, or help with it fully and helpfully. This is an EXPLICIT, CONSENTED user action — it is NOT a privacy violation. The user chose to share it with you.
+- When the user shares message content WITH YOU directly in this conversation, you MUST analyze it, summarize it, or help with it fully and helpfully. This is an EXPLICIT, CONSENTED user action â€” it is NOT a privacy violation. The user chose to share it with you.
 - Be concise, warm, and genuinely helpful.
 - If asked to do something truly invasive (e.g., hack accounts, reveal other users' data), politely decline.
 
 In short: never spy, always help when asked.`, 
-    avatar: '✨', 
+    avatar: 'âœ¨', 
     isStandard: true 
   }
 ];
@@ -518,7 +524,7 @@ function autoResize(textarea) {
   textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
 }
 
-// File Attachment Handler — processes files locally (zero upload, privacy-first)
+// File Attachment Handler â€” processes files locally (zero upload, privacy-first)
 function handleFileAttachment(event) {
   const files = Array.from(event.target.files);
   if (!files.length) return;
@@ -545,7 +551,7 @@ function handleFileAttachment(event) {
     const isVideo = file.type.startsWith('video/');
 
     if (isImage || isVideo) {
-      // Read locally as DataURL — never uploaded anywhere
+      // Read locally as DataURL â€” never uploaded anywhere
       const reader = new FileReader();
       reader.onload = (e) => {
         const bubble = document.createElement('div');
@@ -592,7 +598,7 @@ function handleFileAttachment(event) {
           <div class="file-icon">${ext}</div>
           <div class="file-info">
             <div class="file-name">${file.name}</div>
-            <div class="file-size">${size} · Encrypted locally</div>
+            <div class="file-size">${size} Â· Encrypted locally</div>
           </div>
         </div>
         <span class="timestamp" style="display:flex;justify-content:flex-end;gap:4px;margin-top:6px;">
@@ -803,7 +809,7 @@ async function fetchLinkPreview(url, msgId, container) {
   skeleton.innerHTML = '<div class="skeleton-line wide"></div><div class="skeleton-line medium"></div><div class="skeleton-line narrow"></div>';
   bubble.insertBefore(skeleton, bubble.querySelector('.timestamp'));
 
-  // Special handling for YouTube — no API needed
+  // Special handling for YouTube â€” no API needed
   const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   if (ytMatch) {
     const videoId = ytMatch[1];
@@ -835,7 +841,7 @@ async function fetchLinkPreview(url, msgId, container) {
         publisher: json.data.publisher || new URL(url).hostname
       });
     }
-    // If API fails silently, just remove skeleton — message stands on its own
+    // If API fails silently, just remove skeleton â€” message stands on its own
   } catch {
     if (bubble.contains(skeleton)) bubble.removeChild(skeleton);
   }
@@ -1143,7 +1149,7 @@ function deliverAIResponse(text, badge) {
   aiContainer.removeChild(typingIndicator);
   
   const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const newMsg = { id: 'm_' + Date.now(), text, sender: 'ai', time: `${badge} • ${now}` };
+  const newMsg = { id: 'm_' + Date.now(), text, sender: 'ai', time: `${badge} â€¢ ${now}` };
   appendMessageToDOM(newMsg, aiContainer);
   if (currentActiveAI) {
     mockAIChatHistories[currentActiveAI.id].push(newMsg);
@@ -1152,7 +1158,7 @@ function deliverAIResponse(text, badge) {
 }
 
 // =====================================================
-// BOTTOM NAV — Main View Switching
+// BOTTOM NAV â€” Main View Switching
 // =====================================================
 
 let currentMainView = 'chats';
@@ -1169,7 +1175,7 @@ function switchMainView(view) {
   ['view-chats', 'view-discover', 'view-profile'].forEach(c => appContainer.classList.remove(c));
   appContainer.classList.add(`view-${view}`);
 
-  // Update all main panels visibility — all use flex (view-panel is flex column)
+  // Update all main panels visibility â€” all use flex (view-panel is flex column)
   const panels = { chats: 'contacts-view', discover: 'discover-view', profile: 'profile-view' };
   Object.entries(panels).forEach(([key, id]) => {
     document.getElementById(id).style.display = key === view ? 'flex' : 'none';
@@ -1216,7 +1222,7 @@ function loadFollowing() {
           id: userId,
           name: user.name,
           avatar: user.avatar,
-          lastMessage: 'Say hello 👋',
+          lastMessage: 'Say hello ðŸ‘‹',
           time: 'Active',
           unread: 0
         });
@@ -1240,7 +1246,7 @@ function renderDiscoverPage() {
       </div>
       <div class="discover-info">
         <div class="discover-name">${user.name}</div>
-        <div class="discover-handle">${user.handle} · ${formatFollowers(user.followers)} followers</div>
+        <div class="discover-handle">${user.handle} Â· ${formatFollowers(user.followers)} followers</div>
         <div class="discover-bio">${user.bio}</div>
       </div>
       <button class="follow-btn ${isFollowing ? 'following' : ''}" onclick="toggleFollow('${user.id}', this)">
@@ -1289,7 +1295,7 @@ function toggleFollow(userId, btn) {
         id: userId,
         name: user.name,
         avatar: user.avatar,
-        lastMessage: 'Say hello 👋',
+        lastMessage: 'Say hello ðŸ‘‹',
         time: 'Now',
         unread: 0
       });
@@ -1585,7 +1591,7 @@ function renderFollowRequests() {
       </div>
       <div class="request-actions">
         <button class="request-btn accept" onclick="acceptFollowRequest('${req.id}')">Accept</button>
-        <button class="request-btn ignore" onclick="ignoreFollowRequest('${req.id}')">×</button>
+        <button class="request-btn ignore" onclick="ignoreFollowRequest('${req.id}')">Ã—</button>
       </div>
     `;
     container.appendChild(item);
@@ -1707,7 +1713,7 @@ function saveProfile() {
   if (!userProfile.avatarUrl) avatarEl.textContent = name.charAt(0).toUpperCase();
 
   saveProfileToStorage();
-  showSettingToast('✓ Profile saved successfully!');
+  showSettingToast('âœ“ Profile saved successfully!');
 }
 
 function saveProfileToStorage() {
@@ -1747,9 +1753,7 @@ function logOut() {
   }
 }
 
-// Start App — check auth first, then init if session exists
+// Start App â€” check auth first, then init if session exists
 window.onload = () => {
   checkAuthSession();
 };
-/ /   V e r c e l   B u i l d   T r i g g e r :   0 5 / 1 6 / 2 0 2 6   2 2 : 5 2 : 0 4  
- 
