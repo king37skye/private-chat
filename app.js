@@ -1176,7 +1176,20 @@ async function syncUserProfileToCloud(user) {
       handle: '@' + (user.email ? user.email.split('@')[0] : user.uid.slice(0, 5)),
       lastActive: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
-    console.log("👤 Profile synced to cloud directory.");
+    
+    // SEED: If this is the first user, add a "Guide" user so Discover isn't empty
+    const guideRef = db.collection('users').doc('u_guide_1');
+    await guideRef.set({
+      uid: 'u_guide_1',
+      name: 'Private AI Guide',
+      handle: '@guide',
+      bio: 'Official guide for testing your secure space. Follow me!',
+      avatar: '🛡️',
+      color: '#34C759',
+      lastActive: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    console.log("👤 Profile synced and Guide seeded.");
   } catch (e) {
     console.error("Profile sync failed:", e);
   }
@@ -1800,7 +1813,13 @@ function logOut() {
   if (confirm('Log out of Private AI?')) {
     firebase.auth().signOut().then(() => {
       localStorage.removeItem('privateai_session');
-      location.reload();
+      // Force a clean reload to the login screen
+      window.location.href = window.location.origin;
+    }).catch(err => {
+      console.error("Logout failed:", err);
+      // Fallback
+      localStorage.removeItem('privateai_session');
+      window.location.reload();
     });
   }
 }
