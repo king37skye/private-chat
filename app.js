@@ -1368,20 +1368,17 @@ function toggleFollow(userId, btn) {
 let realDiscoverSource = []; // Store the full list from cloud
 
 async function filterDiscover(query) {
-  const listEl = document.getElementById('discover-list');
   const q = query.toLowerCase().trim();
-  
+  console.log("🔍 Searching for:", q, "in", realDiscoverSource.length, "users");
+
   if (!q) {
     discoverFilteredUsers = [...realDiscoverSource];
-    renderDiscover();
-    return;
+  } else {
+    discoverFilteredUsers = realDiscoverSource.filter(user => 
+      (user.name && user.name.toLowerCase().includes(q)) || 
+      (user.handle && user.handle.toLowerCase().includes(q))
+    );
   }
-
-  // Filter the users we fetched from the cloud
-  discoverFilteredUsers = realDiscoverSource.filter(user => 
-    user.name.toLowerCase().includes(q) || 
-    user.handle.toLowerCase().includes(q)
-  );
   
   renderDiscover();
 }
@@ -1823,6 +1820,16 @@ function logOut() {
     });
   }
 }
+
+// Expose functions to global window to ensure onclick works every time
+window.logOut = logOut;
+window.showTab = showTab;
+window.submitEmailAuth = submitEmailAuth;
+window.loginWithGoogle = loginWithGoogle;
+window.submitPhoneAuth = submitPhoneAuth;
+window.verifyOTP = verifyOTP;
+window.toggleFollow = toggleFollow;
+window.filterDiscover = filterDiscover;
 
 // Start App — check auth first, then init if session exists
 window.onload = () => {
