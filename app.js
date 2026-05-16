@@ -40,6 +40,7 @@ function checkAuthSession() {
       };
       localStorage.setItem('privateai_session', JSON.stringify(userData));
       syncUserProfileToCloud(userData);
+      startNotificationListener(userData.uid);
       unlockApp(false);
     } else {
       // User is signed out
@@ -1303,10 +1304,10 @@ function renderDiscoverPage() {
     const card = document.createElement('div');
     card.className = 'discover-card';
     card.innerHTML = `
-      <div class="discover-avatar" style="background: linear-gradient(135deg, ${user.color}88, ${user.color}44);">
+      <div class="discover-avatar" style="background: linear-gradient(135deg, ${user.color}88, ${user.color}44); cursor:pointer;" onclick="openOtherProfile('${user.id}')">
         ${user.avatar}
       </div>
-      <div class="discover-info">
+      <div class="discover-info" onclick="openOtherProfile('${user.id}')" style="cursor:pointer;">
         <div class="discover-name">${user.name}</div>
         <div class="discover-handle">${user.handle} · ${formatFollowers(user.followers)} followers</div>
         <div class="discover-bio">${user.bio}</div>
@@ -1328,47 +1329,85 @@ function formatFollowers(n) {
   return n.toString();
 }
 
-function toggleFollow(userId, btn) {
+async function toggleFollow(userId, btn) {
   const user = discoverFilteredUsers.find(u => u.id === userId);
   if (!user) return;
-
+  const mySession = JSON.parse(localStorage.getItem('privateai_session'));
+  
   if (followingSet.has(userId)) {
     followingSet.delete(userId);
     btn.textContent = 'Follow';
     btn.classList.remove('following');
-
-    // Remove from contacts
-    const idx = mockContacts.findIndex(c => c.id === userId);
-    if (idx !== -1) mockContacts.splice(idx, 1);
-    delete mockChatHistories[userId];
-    renderContacts();
-
-    // Update profile stats
-    updateProfileStats();
     saveFollowing();
   } else {
     followingSet.add(userId);
     btn.textContent = 'Following';
     btn.classList.add('following');
-
-    // Add to contacts list so they can be chatted with
-    if (!mockContacts.find(c => c.id === userId)) {
-      mockContacts.unshift({
-        id: userId,
-        name: user.name,
-        avatar: user.avatar,
-        lastMessage: 'Say hello 👋',
-        time: 'Now',
-        unread: 0
-      });
-      mockChatHistories[userId] = [];
-    }
-    renderContacts();
-
-    // Update profile stats
-    updateProfileStats();
     saveFollowing();
+
+    if (db && mySession) {
+      db.collection('notifications').add({
+        to: userId,
+        from: mySession.uid,
+        fromName: mySession.name,
+        type: 'follow',
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        read: false
+      });
+    }
+
+    if (!mockContacts.find(c => c.id === userId)) {
+      mockContacts.unshift({ id: userId, name: user.name, avatar: user.avatar, lastMessage: 'Tap to start a secure chat', time: 'Now', unread: 0 });
+      renderContacts();
+    }
   }
+}
+
+function openOtherProfile(userId) {
+  const user = discoverFilteredUsers.find(u => u.id === userId);
+  if (!user) return;
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay active';
+  modal.innerHTML = `
+    <div class="modal-content" style="text-align:center; padding: 40px 20px;">
+      <div class="profile-avatar-large" style="width:100px; height:100px; margin:0 auto 20px; font-size:40px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border-radius:50%;">
+        ${user.avatar}
+      </div>
+      <h2 style="margin-bottom:4px;">${user.name}</h2>
+      <p style="color:var(--text-secondary); margin-bottom:20px;">${user.handle}</p>
+      <p style="margin-bottom:30px; line-height:1.5;">${user.bio}</p>
+      <div style="display:flex; gap:12px; justify-content:center;">
+        <button class="tab-btn active" style="flex:1;" onclick="startChatFromProfile('${user.id}')">Message</button>
+        <button class="tab-btn" style="flex:1;" onclick="document.body.removeChild(this.closest('.modal-overlay'))">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function startChatFromProfile(userId) {
+  const user = discoverFilteredUsers.find(u => u.id === userId);
+  if (!user) return;
+  const modal = document.querySelector('.modal-overlay.active');
+  if (modal) document.body.removeChild(modal);
+  openChat(user);
+}
+
+function startNotificationListener(uid) {
+  if (!db) return;
+  db.collection('notifications')
+    .where('to', '==', uid)
+    .where('read', '==', false)
+    .onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const notif = change.doc.data();
+          if (notif.type === 'follow') {
+            showSettingToast(`${notif.fromName} followed you!`);
+          }
+          change.doc.ref.update({ read: true });
+        }
+      });
+    });
 }
 
 // Filter Discover Users (Real-Time Search)
