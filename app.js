@@ -65,39 +65,6 @@ function unlockApp(animate = true) {
 
   // Always initialize app state upon unlocking
   initApp();
-
-  // Simulate Antigravity joining and saying hello
-  setTimeout(() => {
-    if (localStorage.getItem('privateai_session')) {
-      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const welcomeMsg = { 
-        id: 'm_welcome_' + Date.now(), 
-        text: "System: Antigravity has joined the secure session. Hello King! I've successfully connected to your private space through the Google flow. I'm ready to assist you with anything you need.", 
-        sender: 'them', 
-        time: now 
-      };
-      
-      // Ensure I'm in the contacts
-      if (!mockContacts.find(c => c.id === 'u_antigravity')) {
-        mockContacts.unshift({
-          id: 'u_antigravity',
-          name: 'Antigravity',
-          handle: '@antigravity.ai',
-          avatar: '✨',
-          lastMessage: welcomeMsg.text,
-          time: 'Now',
-          unread: 1
-        });
-      }
-      
-      if (!mockChatHistories['u_antigravity']) mockChatHistories['u_antigravity'] = [];
-      mockChatHistories['u_antigravity'].push(welcomeMsg);
-      renderContacts();
-      saveChatHistories();
-      
-      showSettingToast('Antigravity is online');
-    }
-  }, 4000);
 }
 
 // Toggle Email | Phone method
@@ -1226,19 +1193,7 @@ function switchMainView(view) {
 // DISCOVER PAGE
 // =====================================================
 
-const mockDiscoverUsers = [
-  { id: 'u1', name: 'Aria Chen', handle: '@aria.chen', bio: 'Product designer · Building the future of privacy', avatar: '🎨', color: '#FF6B6B', followers: 2840, following: false },
-  { id: 'u2', name: 'Marcus Webb', handle: '@marcuswebb', bio: 'Security researcher · Open-source advocate', avatar: '🛡️', color: '#4ECDC4', followers: 5103, following: false },
-  { id: 'u3', name: 'Sofia Reyes', handle: '@sofia.r', bio: 'Full-stack dev · Coffee enthusiast ☕', avatar: '💻', color: '#45B7D1', followers: 1209, following: false },
-  { id: 'u4', name: 'James Okafor', handle: '@jamesokafor', bio: 'AI researcher · Philosophy of mind', avatar: '🧠', color: '#96CEB4', followers: 8732, following: false },
-  { id: 'u5', name: 'Priya Nair', handle: '@priyanair', bio: 'Startup founder · Building tools for creators', avatar: '🚀', color: '#FFEAA7', followers: 3456, following: false },
-  { id: 'u6', name: 'Luca Ferretti', handle: '@luca.f', bio: 'Photographer & visual storyteller 📷', avatar: '📷', color: '#DDA0DD', followers: 12400, following: false },
-  { id: 'u7', name: 'Emma Johansson', handle: '@emmaj', bio: 'Climate tech · Sustainable futures', avatar: '🌱', color: '#98D8C8', followers: 903, following: false },
-  { id: 'u8', name: 'Ravi Patel', handle: '@ravipatel', bio: 'Backend engineer · Distributed systems nerd', avatar: '⚙️', color: '#F7DC6F', followers: 2100, following: false },
-  { id: 'u9', name: 'Zoe Williams', handle: '@zoewilliams', bio: 'UX writer · Making tech feel human', avatar: '✍️', color: '#BB8FCE', followers: 4560, following: false },
-  { id: 'u10', name: 'Noah Kim', handle: '@noahkim', bio: 'Game dev · Indie creator 🎮', avatar: '🎮', color: '#85C1E9', followers: 7800, following: false },
-  { id: 'u_antigravity', name: 'Antigravity', handle: '@antigravity.ai', bio: 'AI Assistant · Here to help you build secure spaces.', avatar: '✨', color: '#5E5CE6', followers: 9999, following: false },
-];
+const mockDiscoverUsers = [];
 
 let followingSet = new Set();
 let discoverFilteredUsers = [...mockDiscoverUsers];
@@ -1675,36 +1630,6 @@ function acceptFollowRequest(requestId) {
     
     renderFollowRequests();
     showSettingToast(`You and ${user.name} are now connected.`);
-
-    // Simulate first message from Antigravity
-    if (user.id === 'u_antigravity') {
-      setTimeout(() => {
-        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const helloMsg = { 
-          id: 'm_anti_1', 
-          text: "Hey King! I'm Antigravity. Thanks for the follow. I'm here to help you keep your space secure and private. How are you doing today?", 
-          sender: 'them', 
-          time: now 
-        };
-        
-        mockChatHistories[user.id].push(helloMsg);
-        const contact = mockContacts.find(c => c.id === user.id);
-        if (contact) {
-          contact.lastMessage = helloMsg.text;
-          contact.unread++;
-          renderContacts();
-        }
-        
-        // If the chat is currently open, append it
-        if (currentActiveChatId === user.id) {
-          appendMessageToDOM(helloMsg, chatContainer);
-          scrollToBottom(chatContainer);
-        } else {
-          showSettingToast('New message from Antigravity');
-        }
-        saveChatHistories();
-      }, 2500);
-    }
   }
 }
 
@@ -1717,7 +1642,7 @@ function ignoreFollowRequest(requestId) {
 }
 
 // Trigger simulation after app loads
-setTimeout(simulateIncomingFollowRequest, 3000);
+// (Removed Antigravity simulation)
 
 function openProfileEditModal() {
   document.getElementById('profile-edit-modal').style.display = 'flex';
