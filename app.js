@@ -262,12 +262,15 @@ let mockAIChatHistories = {
 // =====================================================
 
 // Generate or retrieve a persistent encryption key for this device
-async function getDeviceKey() {
-  let keyMaterial = localStorage.getItem('privateai_key_material');
+async function getDeviceKey(customKeyMaterial) {
+  let keyMaterial = customKeyMaterial;
   if (!keyMaterial) {
-    keyMaterial = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map(b => b.toString(16).padStart(2, '0')).join('');
-    localStorage.setItem('privateai_key_material', keyMaterial);
+    keyMaterial = localStorage.getItem('privateai_key_material');
+    if (!keyMaterial) {
+      keyMaterial = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem('privateai_key_material', keyMaterial);
+    }
   }
 
   const encoder = new TextEncoder();
@@ -277,8 +280,8 @@ async function getDeviceKey() {
   );
 }
 
-async function encryptData(data) {
-  const key = await getDeviceKey();
+async function encryptData(data, customKeyMaterial) {
+  const key = await getDeviceKey(customKeyMaterial);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoder = new TextEncoder();
   const encrypted = await crypto.subtle.encrypt(
@@ -294,10 +297,10 @@ async function encryptData(data) {
   });
 }
 
-async function decryptData(encryptedString) {
+async function decryptData(encryptedString, customKeyMaterial) {
   try {
     const { iv, data } = JSON.parse(encryptedString);
-    const key = await getDeviceKey();
+    const key = await getDeviceKey(customKeyMaterial);
     const decrypted = await crypto.subtle.decrypt(
       { name: "AES-GCM", iv: new Uint8Array(iv) },
       key,
@@ -760,12 +763,13 @@ async function sendMessage() {
       const senderName = savedProfile.name || (mySession ? mySession.name : 'User');
 
       if (db && myUid) {
-        // Encrypt the message for the relay
+        // Encrypt the message for the relay using shared E2EE chat key
+        const sharedSecret = [myUid, targetChatId].sort().join('_');
         const encryptedPacket = await encryptData({
           text: text,
           senderHandle: senderName,
           time: now
-        });
+        }, sharedSecret);
 
         // Send to the recipient's inbox (using their Firebase UID as ID)
         await db.collection('relay').add({
@@ -1638,8 +1642,9 @@ function startRelayListener() {
           const doc = change.doc;
           const { from, packet } = doc.data();
 
-          // Decrypt the incoming packet
-          const decrypted = await decryptData(packet);
+          // Decrypt the incoming packet using shared E2EE chat key
+          const sharedSecret = [myUid, from].sort().join('_');
+          const decrypted = await decryptData(packet, sharedSecret);
           if (decrypted) {
             const incomingMsg = {
               id: 'm_relay_' + doc.id,
