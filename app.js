@@ -1274,25 +1274,6 @@ function saveFollowing() {
 function loadFollowing() {
   const saved = JSON.parse(localStorage.getItem('privateai_following') || '[]');
   followingSet = new Set(saved);
-
-  // Inject followed users into mockContacts
-  followingSet.forEach(userId => {
-    const user = mockDiscoverUsers.find(u => u.id === userId);
-    if (user) {
-      // Avoid duplicates
-      if (!mockContacts.find(c => c.id === userId)) {
-        mockContacts.push({
-          id: userId,
-          name: user.name,
-          avatar: user.avatar,
-          lastMessage: 'Say hello 👋',
-          time: 'Active',
-          unread: 0
-        });
-        if (!mockChatHistories[userId]) mockChatHistories[userId] = [];
-      }
-    }
-  });
 }
 
 function renderDiscoverPage() {
