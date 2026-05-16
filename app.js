@@ -755,20 +755,22 @@ async function sendMessage() {
     // --- REAL-TIME RELAY START ---
     try {
       const mySession = JSON.parse(localStorage.getItem('privateai_session'));
-      const handle = mySession ? mySession.name : 'User';
+      const myUid = mySession ? mySession.uid : null;
+      const savedProfile = JSON.parse(localStorage.getItem('privateai_profile') || '{}');
+      const senderName = savedProfile.name || (mySession ? mySession.name : 'User');
 
-      // Encrypt the message for the relay
-      const encryptedPacket = await encryptData({
-        text: text,
-        senderHandle: handle,
-        time: now
-      });
+      if (db && myUid) {
+        // Encrypt the message for the relay
+        const encryptedPacket = await encryptData({
+          text: text,
+          senderHandle: senderName,
+          time: now
+        });
 
-      // Send to the recipient's inbox (using their handle as ID)
-      if (db) {
+        // Send to the recipient's inbox (using their Firebase UID as ID)
         await db.collection('relay').add({
-          to: targetChatId,
-          from: userProfile.username,
+          to: targetChatId, // Recipient's UID
+          from: myUid,      // Sender's UID
           packet: encryptedPacket,
           timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -1590,11 +1592,13 @@ function closeSettingsDetail() {
 
 // Global Listener for incoming Relay messages
 function startRelayListener() {
-  if (!db || !userProfile.username) return;
+  const session = JSON.parse(localStorage.getItem('privateai_session') || '{}');
+  const myUid = session.uid;
+  if (!db || !myUid) return;
 
-  // Listen for packets sent TO this user
+  // Listen for packets sent TO this user (using UID)
   db.collection('relay')
-    .where('to', '==', userProfile.username)
+    .where('to', '==', myUid)
     .onSnapshot(async (snapshot) => {
       for (const change of snapshot.docChanges()) {
         if (change.type === 'added') {
@@ -1615,18 +1619,42 @@ function startRelayListener() {
             if (!mockChatHistories[from]) mockChatHistories[from] = [];
             mockChatHistories[from].push(incomingMsg);
 
+            // If contact is not in mockContacts, add it!
+            let contact = mockContacts.find(c => c.id === from);
+            if (!contact) {
+              contact = {
+                id: from,
+                name: decrypted.senderHandle || 'New Contact',
+                avatar: '👤',
+                lastMessage: incomingMsg.text,
+                time: incomingMsg.time,
+                unread: currentActiveChatId === from ? 0 : 1
+              };
+              mockContacts.unshift(contact);
+              renderContacts();
+
+              // Fetch details from users collection in background to render beautifully
+              db.collection('users').doc(from).get().then(userDoc => {
+                if (userDoc.exists) {
+                  const data = userDoc.data();
+                  contact.name = data.name || contact.name;
+                  contact.avatar = data.photo || '👤';
+                  renderContacts();
+                }
+              });
+            } else {
+              contact.lastMessage = incomingMsg.text;
+              contact.time = incomingMsg.time;
+              if (currentActiveChatId !== from) {
+                contact.unread++;
+              }
+              renderContacts();
+            }
+
             // If chat is open, show it
             if (currentActiveChatId === from) {
               appendMessageToDOM(incomingMsg, chatContainer);
               scrollToBottom(chatContainer);
-            } else {
-              // Update contact list unread count
-              const contact = mockContacts.find(c => c.handle === from || c.id === from);
-              if (contact) {
-                contact.lastMessage = incomingMsg.text;
-                contact.unread++;
-                renderContacts();
-              }
             }
             saveChatHistories();
           }
