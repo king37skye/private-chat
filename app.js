@@ -462,12 +462,18 @@ function saveNewAI() {
 
 // Navigation Routing: Open Chat
 function openChat(profile, isAIProfile = false) {
+  // Ensure we are in the 'chats' view mode so the chat panel isn't hidden by desktop CSS rules
+  if (currentMainView !== 'chats') {
+    showTab('chats');
+  }
+
   currentActiveChatId = profile.id;
   currentActiveAI = isAIProfile ? profile : null;
   navTitle.textContent = profile.name;
   document.getElementById('nav-subtitle').style.display = isAIProfile ? 'none' : 'block';
 
   backBtn.style.display = 'flex';
+
 
   const container = isAIProfile ? aiContainer : chatContainer;
   const history = isAIProfile ? (mockAIChatHistories[profile.id] || []) : (mockChatHistories[profile.id] || []);
@@ -482,6 +488,15 @@ function openChat(profile, isAIProfile = false) {
     aiContainer.style.display = 'none';
     inputField.placeholder = "Secure Message";
     sendBtn.classList.remove('ai-mode');
+  }
+
+  // Initialize chat history and contact if it doesn't exist
+  if (!isAIProfile && !mockChatHistories[profile.id]) {
+    mockChatHistories[profile.id] = [];
+  }
+  if (!isAIProfile && !mockContacts.find(c => c.id === profile.id)) {
+    mockContacts.unshift({ id: profile.id, name: profile.name, avatar: profile.avatar, lastMessage: 'Tap to start a secure chat', time: 'Now', unread: 0 });
+    renderContacts();
   }
 
   container.innerHTML = '';
@@ -739,10 +754,13 @@ async function sendMessage() {
 
     // --- REAL-TIME RELAY START ---
     try {
+      const mySession = JSON.parse(localStorage.getItem('privateai_session'));
+      const handle = mySession ? mySession.name : 'User';
+
       // Encrypt the message for the relay
       const encryptedPacket = await encryptData({
         text: text,
-        senderHandle: userProfile.username,
+        senderHandle: handle,
         time: now
       });
 

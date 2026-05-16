@@ -407,7 +407,7 @@
             id="message-input" 
             placeholder="Secure Message" 
             rows="1"
-            oninput="autoResize(this)"
+            oninput="autoResize(this); handleInput();"
             onkeydown="handleKeyPress(event)"
           ></textarea>
           <div class="input-actions" style="display: flex; align-items: center; gap: 8px;">
