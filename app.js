@@ -1831,6 +1831,7 @@ function logOut() {
 // Expose functions to global window at the very end to ensure they are defined
 window.logOut = logOut;
 window.showTab = showTab;
+window.switchMainView = showTab; // Bulletproof: Support both names
 window.submitEmailAuth = submitEmailAuth;
 window.loginWithGoogle = loginWithGoogle;
 window.submitPhoneAuth = submitPhoneAuth;
