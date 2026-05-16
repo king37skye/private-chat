@@ -32,11 +32,11 @@ function checkAuthSession() {
   firebase.auth().onAuthStateChanged((user) => {
     if (user) {
       // User is signed in
-      const userData = { 
+      const userData = {
         uid: user.uid,
-        email: user.email, 
-        name: user.displayName || 'User', 
-        photo: user.photoURL 
+        email: user.email,
+        name: user.displayName || 'User',
+        photo: user.photoURL
       };
       localStorage.setItem('privateai_session', JSON.stringify(userData));
       unlockApp(false);
@@ -109,7 +109,7 @@ function submitEmailAuth() {
 
   errEl.textContent = '';
   if (!email || !password) { errEl.textContent = 'Email and password required.'; return; }
-  
+
   btn.disabled = true;
   const originalText = document.getElementById('auth-submit-email-text').textContent;
   document.getElementById('auth-submit-email-text').textContent = 'Securing...';
@@ -229,9 +229,9 @@ let mockChatHistories = {};
 
 // Mock AIs Data
 const mockAIs = [
-  { 
-    id: 'ai_std', 
-    name: 'Standard Assistant', 
+  {
+    id: 'ai_std',
+    name: 'Standard Assistant',
     role: `You are a helpful, privacy-first AI assistant inside a secure encrypted messaging app.
 
 CRITICAL PRIVACY RULES:
@@ -243,9 +243,9 @@ WHAT YOU MUST ALWAYS DO:
 - Be concise, warm, and genuinely helpful.
 - If asked to do something truly invasive (e.g., hack accounts, reveal other users' data), politely decline.
 
-In short: never spy, always help when asked.`, 
-    avatar: '✨', 
-    isStandard: true 
+In short: never spy, always help when asked.`,
+    avatar: '✨',
+    isStandard: true
   }
 ];
 
@@ -267,7 +267,7 @@ async function getDeviceKey() {
       .map(b => b.toString(16).padStart(2, '0')).join('');
     localStorage.setItem('privateai_key_material', keyMaterial);
   }
-  
+
   const encoder = new TextEncoder();
   const rawKey = encoder.encode(keyMaterial);
   return crypto.subtle.importKey(
@@ -284,7 +284,7 @@ async function encryptData(data) {
     key,
     encoder.encode(JSON.stringify(data))
   );
-  
+
   // Package IV + Data for storage
   return JSON.stringify({
     iv: Array.from(iv),
@@ -322,7 +322,7 @@ async function loadChatHistories() {
     const decrypted = await decryptData(savedChats);
     if (decrypted) mockChatHistories = decrypted;
   }
-  
+
   const savedAIChats = localStorage.getItem('privateai_ai_chats_v2');
   if (savedAIChats) {
     const decryptedAI = await decryptData(savedAIChats);
@@ -348,7 +348,7 @@ function initApp() {
   loadFollowing(); // Restore followed users
   loadChatHistories(); // Restore messages
   renderContacts();
-  
+
   // Start listening for real-time messages
   startRelayListener();
 }
@@ -356,12 +356,12 @@ function initApp() {
 // Render Contacts List
 function renderContacts() {
   contactsListContainer.innerHTML = '';
-  
+
   mockContacts.forEach(contact => {
     const row = document.createElement('div');
     row.className = 'contact-row';
     row.onclick = () => openChat(contact);
-    
+
     // Unread badge logic
     const unreadHtml = contact.unread > 0 ? `<div class="unread-badge">${contact.unread}</div>` : '';
 
@@ -386,12 +386,12 @@ function renderContacts() {
 function renderAIs() {
   const aisListContainer = document.getElementById('ais-list');
   aisListContainer.innerHTML = '';
-  
+
   mockAIs.forEach(ai => {
     const row = document.createElement('div');
     row.className = 'contact-row';
     row.onclick = () => openChat(ai, true);
-    
+
     row.innerHTML = `
       <div class="contact-avatar">${ai.avatar}</div>
       <div class="contact-info">
@@ -405,7 +405,7 @@ function renderAIs() {
     `;
     aisListContainer.appendChild(row);
   });
-  
+
   // Create New AI Button
   const createRow = document.createElement('div');
   createRow.className = 'contact-row';
@@ -421,7 +421,7 @@ function switchMainTab(tabId) {
   currentMainTab = tabId;
   document.getElementById('main-tab-chats').classList.toggle('active', tabId === 'chats');
   document.getElementById('main-tab-ais').classList.toggle('active', tabId === 'ais');
-  
+
   if (tabId === 'chats') {
     document.getElementById('contacts-list').style.display = 'block';
     document.getElementById('ais-list').style.display = 'none';
@@ -433,8 +433,8 @@ function switchMainTab(tabId) {
 }
 
 function openCreateAIModal() { document.getElementById('create-ai-modal').classList.add('active'); }
-function closeCreateAIModal() { 
-  document.getElementById('create-ai-modal').classList.remove('active'); 
+function closeCreateAIModal() {
+  document.getElementById('create-ai-modal').classList.remove('active');
   document.getElementById('new-ai-name').value = '';
   document.getElementById('new-ai-role').value = '';
 }
@@ -442,18 +442,18 @@ function saveNewAI() {
   const name = document.getElementById('new-ai-name').value.trim();
   const role = document.getElementById('new-ai-role').value.trim();
   if (!name || !role) return;
-  
+
   const newAI = {
     id: 'ai_' + Date.now(),
     name: name,
     role: role,
-    avatar: name.substring(0,2).toUpperCase(),
+    avatar: name.substring(0, 2).toUpperCase(),
     isStandard: false
   };
-  
+
   mockAIs.push(newAI);
-  mockAIChatHistories[newAI.id] = [{ id: 'm1', text: `Hello, I am ${name}. ${role.substring(0,30)}...`, sender: 'ai', time: 'Just now' }];
-  
+  mockAIChatHistories[newAI.id] = [{ id: 'm1', text: `Hello, I am ${name}. ${role.substring(0, 30)}...`, sender: 'ai', time: 'Just now' }];
+
   closeCreateAIModal();
   renderAIs();
 }
@@ -464,12 +464,12 @@ function openChat(profile, isAIProfile = false) {
   currentActiveAI = isAIProfile ? profile : null;
   navTitle.textContent = profile.name;
   document.getElementById('nav-subtitle').style.display = isAIProfile ? 'none' : 'block';
-  
+
   backBtn.style.display = 'flex';
-  
+
   const container = isAIProfile ? aiContainer : chatContainer;
   const history = isAIProfile ? (mockAIChatHistories[profile.id] || []) : (mockChatHistories[profile.id] || []);
-  
+
   if (isAIProfile) {
     chatContainer.style.display = 'none';
     aiContainer.style.display = 'flex';
@@ -481,9 +481,9 @@ function openChat(profile, isAIProfile = false) {
     inputField.placeholder = "Secure Message";
     sendBtn.classList.remove('ai-mode');
   }
-  
+
   container.innerHTML = '';
-  
+
   // Render history with grouping
   let lastSender = null;
   history.forEach((msg, index) => {
@@ -492,7 +492,7 @@ function openChat(profile, isAIProfile = false) {
     appendMessageToDOM(msg, container, isPrevSame, isNextSame);
     lastSender = msg.sender;
   });
-  
+
   scrollToBottom(container);
   appContainer.classList.add('app-state-chat');
   // Removed: document.getElementById('bottom-nav').style.display = 'none';
@@ -504,7 +504,7 @@ function closeChat() {
   currentActiveAI = null;
   appContainer.classList.remove('app-state-chat');
   // Removed: document.getElementById('bottom-nav').style.display = 'flex';
-  
+
   setTimeout(() => {
     const titles = { chats: 'Chats', discover: 'Discover', profile: 'Profile' };
     navTitle.textContent = titles[currentMainView] || 'Chats';
@@ -625,7 +625,7 @@ function handleInput() {
   const text = inputField.value.trim();
   const micBtn = document.getElementById('mic-btn');
   const sendBtn = document.getElementById('send-btn');
-  
+
   if (text.length > 0) {
     micBtn.style.display = 'none';
     sendBtn.style.display = 'flex';
@@ -647,36 +647,36 @@ function appendMessageToDOM(msg, container, isPrevSame = false, isNextSame = fal
   const bubble = document.createElement('div');
   bubble.className = `message-bubble message-${msg.sender === 'me' ? 'sent' : (msg.sender === 'ai' ? 'ai' : 'received')}`;
   bubble.id = msg.id;
-  
+
   if (isPrevSame) bubble.classList.add('grouped-top');
   if (isNextSame) bubble.classList.add('grouped-bottom');
-  
+
   const contentDiv = document.createElement('div');
   contentDiv.className = 'message-content';
-  
+
   // Parse markdown for AI responses, otherwise use raw text
   if (msg.sender === 'ai' && typeof marked !== 'undefined') {
     contentDiv.innerHTML = marked.parse(msg.text);
   } else {
     contentDiv.textContent = msg.text;
   }
-  
+
   bubble.appendChild(contentDiv);
-  
+
   const timeSpan = document.createElement('span');
   timeSpan.className = 'timestamp';
-  
+
   if (msg.sender === 'me' && container === chatContainer) {
     const isRead = msg.status === 'read';
-    const statusIcon = isRead 
+    const statusIcon = isRead
       ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="read"><path d="M18 6L7 17l-5-5"></path><path d="M22 10l-6.5 6.5"></path></svg>`
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>`;
-    
+
     timeSpan.innerHTML = `${msg.time} <span class="read-receipt ${msg.status || 'sent'}">${statusIcon}</span>`;
   } else {
     timeSpan.textContent = msg.time;
   }
-  
+
   bubble.appendChild(timeSpan);
 
   // Enable context menu
@@ -705,7 +705,7 @@ async function sendMessage() {
 
   const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const newMsg = { id: 'm_' + Date.now(), text, sender: 'me', time: now, status: 'sent' };
-  
+
   inputField.value = '';
   autoResize(inputField);
   handleInput(); // Reset mic/send toggle
@@ -716,10 +716,10 @@ async function sendMessage() {
   if (!targetAI) {
     const history = mockChatHistories[targetChatId];
     if (!history) return;
-    
+
     const lastMsg = history[history.length - 1];
     const isPrevSame = lastMsg && lastMsg.sender === 'me';
-    
+
     // Only append to DOM if we are still looking at THIS chat
     if (currentActiveChatId === targetChatId) {
       appendMessageToDOM(newMsg, chatContainer, isPrevSame, false);
@@ -728,13 +728,13 @@ async function sendMessage() {
         if (prevEl) prevEl.classList.add('grouped-bottom');
       }
     }
-    
+
     history.push(newMsg);
     saveChatHistories();
-    
+
     // Fetch link preview if URL found
     if (detectedUrl) fetchLinkPreview(detectedUrl, newMsg.id, chatContainer);
-    
+
     // --- REAL-TIME RELAY START ---
     try {
       // Encrypt the message for the relay
@@ -747,7 +747,7 @@ async function sendMessage() {
       // Send to the recipient's inbox (using their handle as ID)
       if (db) {
         await db.collection('relay').add({
-          to: targetChatId, 
+          to: targetChatId,
           from: userProfile.username,
           packet: encryptedPacket,
           timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -762,10 +762,10 @@ async function sendMessage() {
   } else {
     const history = mockAIChatHistories[targetAI.id];
     if (!history) return;
-    
+
     const lastMsg = history[history.length - 1];
     const isPrevSame = lastMsg && lastMsg.sender === 'me';
-    
+
     // Only append to DOM if we are still looking at THIS AI
     if (currentActiveAI && currentActiveAI.id === targetAI.id) {
       appendMessageToDOM(newMsg, aiContainer, isPrevSame, false);
@@ -774,13 +774,13 @@ async function sendMessage() {
         if (prevEl) prevEl.classList.add('grouped-bottom');
       }
     }
-    
+
     history.push(newMsg);
     saveChatHistories();
-    
+
     // Fetch link preview if URL found
     if (detectedUrl) fetchLinkPreview(detectedUrl, newMsg.id, aiContainer);
-    
+
     processAIQuery(text);
   }
 }
@@ -825,7 +825,7 @@ async function fetchLinkPreview(url, msgId, container) {
     const resp = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
     const json = await resp.json();
     bubble.removeChild(skeleton);
-    
+
     if (json.status === 'success') {
       renderLinkPreview(bubble, {
         title: json.data.title,
@@ -872,7 +872,7 @@ function mockE2EEResponse(sentMsgId) {
   chatContainer.appendChild(typingIndicator);
   typingIndicator.classList.add('active');
   scrollToBottom(chatContainer);
-  
+
   // Transition to Delivered after 500ms
   setTimeout(() => {
     const sentMsg = mockChatHistories[currentActiveChatId].find(m => m.id === sentMsgId);
@@ -893,19 +893,19 @@ function mockE2EEResponse(sentMsgId) {
       const receipt = msgEl.querySelector('.read-receipt');
       if (receipt) receipt.classList.add('read');
     }
-    
+
     typingIndicator.classList.remove('active');
     chatContainer.removeChild(typingIndicator);
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const responseMsg = { id: 'm_' + Date.now(), text: "Encrypted and received. I'm reviewing it now.", sender: 'them', time: now };
     appendMessageToDOM(responseMsg, chatContainer);
-    
-    if(currentActiveChatId) {
+
+    if (currentActiveChatId) {
       mockChatHistories[currentActiveChatId].push(responseMsg);
       saveChatHistories();
       // Also update the contacts list last message preview
       const contact = mockContacts.find(c => c.id === currentActiveChatId);
-      if(contact) {
+      if (contact) {
         contact.lastMessage = responseMsg.text;
         contact.time = now;
         renderContacts();
@@ -923,9 +923,9 @@ function handleLongPress(bubble, msgId) {
   return (e) => {
     if (isSelectingForAI) return; // Don't open context menu if in selection mode
     longPressTimer = setTimeout(() => {
-      openContextMenu({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY, preventDefault: ()=>{} }, msgId);
+      openContextMenu({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY, preventDefault: () => { } }, msgId);
     }, 500);
-    e.target.addEventListener('touchend', () => clearTimeout(longPressTimer), {once:true});
+    e.target.addEventListener('touchend', () => clearTimeout(longPressTimer), { once: true });
   };
 }
 
@@ -939,13 +939,13 @@ function openContextMenu(e, msgId) {
     if (el) toggleMessageSelection(el);
     return;
   }
-  
+
   selectedContextMessageId = msgId;
   const overlay = document.getElementById('context-menu-overlay');
   const menu = document.getElementById('context-menu-content');
-  
+
   overlay.style.display = 'flex';
-  
+
   // Position menu roughly where clicked
   menu.style.left = Math.min(e.clientX, window.innerWidth - 240) + 'px';
   menu.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px';
@@ -970,7 +970,7 @@ function deleteSelectedMessage(e) {
   e.stopPropagation();
   const el = document.getElementById(selectedContextMessageId);
   if (el) el.remove();
-  
+
   // Clean up history
   if (currentActiveAI) {
     mockAIChatHistories[currentActiveAI.id] = mockAIChatHistories[currentActiveAI.id].filter(m => m.id !== selectedContextMessageId);
@@ -984,18 +984,18 @@ function deleteSelectedMessage(e) {
 function shareSelectedWithAI(e) {
   e.stopPropagation();
   if (!selectedContextMessageId) return;
-  
+
   const el = document.getElementById(selectedContextMessageId);
   const contentDiv = el ? el.querySelector('.message-content') : null;
   const text = contentDiv ? contentDiv.textContent.trim() : "";
-  
+
   closeContextMenu();
-  
+
   const stdAI = mockAIs.find(ai => ai.id === 'ai_std');
   if (stdAI) {
     openChat(stdAI, true);
   }
-  
+
   inputField.value = `Please analyze this message:\n- ${text}`;
   autoResize(inputField);
   handleInput();
@@ -1009,17 +1009,17 @@ function shareSelectedWithAI(e) {
 function enterSelectionMode(e) {
   if (e) e.stopPropagation();
   closeContextMenu();
-  
+
   if (currentActiveAI) return; // Only allow in human chats for now
-  
+
   isSelectingForAI = true;
   contextBanner.classList.add('active');
-  
+
   Array.from(chatContainer.querySelectorAll('.message-bubble')).forEach(el => {
     el.classList.add('selectable');
     el.onclick = () => toggleMessageSelection(el);
   });
-  
+
   // Pre-select the message that was right-clicked/long-pressed
   if (selectedContextMessageId) {
     const el = document.getElementById(selectedContextMessageId);
@@ -1029,7 +1029,7 @@ function enterSelectionMode(e) {
 
 function toggleMessageSelection(bubble) {
   if (!isSelectingForAI) return;
-  
+
   const id = bubble.id;
   if (selectedMessages.has(id)) {
     selectedMessages.delete(id);
@@ -1057,7 +1057,7 @@ function cancelAiSelection() {
   isSelectingForAI = false;
   selectedMessages.clear();
   contextBanner.classList.remove('active');
-  
+
   Array.from(chatContainer.querySelectorAll('.message-bubble')).forEach(el => {
     el.classList.remove('selectable');
     el.classList.remove('selected');
@@ -1084,13 +1084,13 @@ function shareWithAI() {
 
   // 2. Clear selection UI
   cancelAiSelection();
-  
+
   // 3. Navigate to Standard AI chat
   const stdAI = mockAIs.find(ai => ai.id === 'ai_std');
   if (stdAI) {
     openChat(stdAI, true);
   }
-  
+
   // 4. Set input AFTER navigation (small delay for view transition)
   const textToInsert = `Please analyze these messages:\n${sharedText}`;
   setTimeout(() => {
@@ -1141,7 +1141,7 @@ async function processAIQuery(query) {
 function deliverAIResponse(text, badge) {
   typingIndicator.classList.remove('active');
   aiContainer.removeChild(typingIndicator);
-  
+
   const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const newMsg = { id: 'm_' + Date.now(), text, sender: 'ai', time: `${badge} • ${now}` };
   appendMessageToDOM(newMsg, aiContainer);
@@ -1162,7 +1162,7 @@ function switchMainView(view) {
   if (view !== 'chats' && currentActiveChatId) {
     closeChat();
   }
-  
+
   currentMainView = view;
 
   // Update classes on appContainer for CSS targeting
@@ -1205,7 +1205,7 @@ function saveFollowing() {
 function loadFollowing() {
   const saved = JSON.parse(localStorage.getItem('privateai_following') || '[]');
   followingSet = new Set(saved);
-  
+
   // Inject followed users into mockContacts
   followingSet.forEach(userId => {
     const user = mockDiscoverUsers.find(u => u.id === userId);
@@ -1307,10 +1307,10 @@ function filterDiscover(query) {
   const q = query.toLowerCase().trim();
   discoverFilteredUsers = q
     ? mockDiscoverUsers.filter(u =>
-        u.name.toLowerCase().includes(q) ||
-        u.handle.toLowerCase().includes(q) ||
-        u.bio.toLowerCase().includes(q)
-      )
+      u.name.toLowerCase().includes(q) ||
+      u.handle.toLowerCase().includes(q) ||
+      u.bio.toLowerCase().includes(q)
+    )
     : [...mockDiscoverUsers];
   renderDiscoverPage();
 }
@@ -1323,10 +1323,10 @@ function openUserListModal(type) {
   const modal = document.getElementById('user-list-modal');
   const title = document.getElementById('user-list-title');
   const content = document.getElementById('user-list-content');
-  
+
   modal.style.display = 'flex';
   content.innerHTML = '';
-  
+
   if (type === 'following') {
     title.textContent = 'Following';
     const following = mockDiscoverUsers.filter(u => followingSet.has(u.id));
@@ -1338,7 +1338,7 @@ function openUserListModal(type) {
   } else {
     title.textContent = 'Followers';
     // Mock some followers (subset of discover users + some random ones)
-    const followers = mockDiscoverUsers.slice(0, 5); 
+    const followers = mockDiscoverUsers.slice(0, 5);
     followers.forEach(user => appendUserToModalList(user, content));
   }
 }
@@ -1372,9 +1372,9 @@ function openSettingsDetail(type) {
   const modal = document.getElementById('settings-detail-modal');
   const title = document.getElementById('settings-detail-title');
   const content = document.getElementById('settings-detail-content');
-  
+
   modal.style.display = 'flex';
-  
+
   const details = {
     privacy: {
       title: 'Privacy & Security',
@@ -1452,7 +1452,7 @@ function openSettingsDetail(type) {
       `
     }
   };
-  
+
   title.textContent = details[type].title;
   content.innerHTML = details[type].html;
 }
@@ -1473,7 +1473,7 @@ function startRelayListener() {
         if (change.type === 'added') {
           const doc = change.doc;
           const { from, packet } = doc.data();
-          
+
           // Decrypt the incoming packet
           const decrypted = await decryptData(packet);
           if (decrypted) {
@@ -1487,7 +1487,7 @@ function startRelayListener() {
             // Save to local history
             if (!mockChatHistories[from]) mockChatHistories[from] = [];
             mockChatHistories[from].push(incomingMsg);
-            
+
             // If chat is open, show it
             if (currentActiveChatId === from) {
               appendMessageToDOM(incomingMsg, chatContainer);
@@ -1503,7 +1503,7 @@ function startRelayListener() {
             }
             saveChatHistories();
           }
-          
+
           // Delete from cloud immediately after processing (Privacy-First)
           doc.ref.delete();
         }
@@ -1560,18 +1560,18 @@ function loadProfilePage() {
 function renderFollowRequests() {
   const container = document.getElementById('follow-requests-list');
   if (!container) return;
-  
+
   container.innerHTML = '';
   const badge = document.getElementById('profile-notif-badge');
-  
+
   if (followRequests.length === 0) {
     container.innerHTML = '<div style="padding:16px; text-align:center; color:var(--text-secondary); font-size:0.85rem;">No pending requests</div>';
     if (badge) badge.style.display = 'none';
     return;
   }
-  
+
   if (badge) badge.style.display = 'block';
-  
+
   followRequests.forEach(req => {
     const item = document.createElement('div');
     item.className = 'request-item';
@@ -1595,10 +1595,10 @@ function renderFollowRequests() {
 function simulateIncomingFollowRequest() {
   const antigravity = mockDiscoverUsers.find(u => u.id === 'u_antigravity');
   if (!antigravity) return;
-  
+
   const requestId = 'req_' + Date.now();
   followRequests.push({ id: requestId, user: antigravity });
-  
+
   renderFollowRequests();
   showSettingToast('New follow request from Antigravity!');
 }
@@ -1608,11 +1608,11 @@ function acceptFollowRequest(requestId) {
   if (idx !== -1) {
     const user = followRequests[idx].user;
     followRequests.splice(idx, 1);
-    
+
     // Add to followers count (mock)
     const followersEl = document.getElementById('stat-followers');
     if (followersEl) followersEl.textContent = parseInt(followersEl.textContent) + 1;
-    
+
     // Add to chat list if not already there
     if (!mockContacts.find(c => c.id === user.id)) {
       mockContacts.unshift({
@@ -1627,7 +1627,7 @@ function acceptFollowRequest(requestId) {
       mockChatHistories[user.id] = [];
       renderContacts();
     }
-    
+
     renderFollowRequests();
     showSettingToast(`You and ${user.name} are now connected.`);
   }
@@ -1662,7 +1662,7 @@ function saveProfileEdits() {
   userProfile.bio = newBio;
 
   localStorage.setItem('privateai_profile', JSON.stringify(userProfile));
-  
+
   // Update UI
   loadProfilePage();
   closeProfileEditModal();
@@ -1672,7 +1672,7 @@ function saveProfileEdits() {
 function updateProfileStats() {
   document.getElementById('stat-following').textContent = followingSet.size;
   document.getElementById('stat-chats').textContent = mockContacts.length;
-  
+
   // Followers: Use a fixed random number stored in session if not present
   const session = JSON.parse(localStorage.getItem('privateai_session') || '{}');
   if (!session.mockFollowers) {
