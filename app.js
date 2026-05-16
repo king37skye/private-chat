@@ -1207,6 +1207,7 @@ async function fetchRealDiscoverUsers() {
     });
     
     // Update the UI
+    realDiscoverSource = users; // Update our search source
     discoverFilteredUsers = users;
     renderDiscover();
   } catch (e) {
@@ -1350,16 +1351,26 @@ function toggleFollow(userId, btn) {
   }
 }
 
-function filterDiscover(query) {
+// Filter Discover Users (Real-Time Search)
+let realDiscoverSource = []; // Store the full list from cloud
+
+async function filterDiscover(query) {
+  const listEl = document.getElementById('discover-list');
   const q = query.toLowerCase().trim();
-  discoverFilteredUsers = q
-    ? mockDiscoverUsers.filter(u =>
-      u.name.toLowerCase().includes(q) ||
-      u.handle.toLowerCase().includes(q) ||
-      u.bio.toLowerCase().includes(q)
-    )
-    : [...mockDiscoverUsers];
-  renderDiscoverPage();
+  
+  if (!q) {
+    discoverFilteredUsers = [...realDiscoverSource];
+    renderDiscover();
+    return;
+  }
+
+  // Filter the users we fetched from the cloud
+  discoverFilteredUsers = realDiscoverSource.filter(user => 
+    user.name.toLowerCase().includes(q) || 
+    user.handle.toLowerCase().includes(q)
+  );
+  
+  renderDiscover();
 }
 
 // =====================================================
