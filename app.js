@@ -14,7 +14,7 @@ let db;
 try {
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
-  console.log("Ã¢Å“â€¦ Firebase Relay connected.");
+  console.log("✅ Firebase Relay connected.");
 } catch (e) {
   console.error("Ã¢ÂÅ’ Firebase failed to initialize. Using offline mock mode.");
 }
