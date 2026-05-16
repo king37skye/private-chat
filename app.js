@@ -39,6 +39,7 @@ function checkAuthSession() {
         photo: user.photoURL
       };
       localStorage.setItem('privateai_session', JSON.stringify(userData));
+      syncUserProfileToCloud(userData);
       unlockApp(false);
     } else {
       // User is signed out
@@ -1162,14 +1163,87 @@ function switchMainView(view) {
   if (view === 'profile') loadProfilePage();
 }
 
-// =====================================================
-// DISCOVER PAGE
-// =====================================================
+// --- REAL-TIME DISCOVERY ENGINE ---
+async function syncUserProfileToCloud(user) {
+  if (!db || !user) return;
+  try {
+    const userRef = db.collection('users').doc(user.uid);
+    await userRef.set({
+      uid: user.uid,
+      name: user.name || 'User',
+      email: user.email || '',
+      photo: user.photo || '',
+      handle: '@' + (user.email ? user.email.split('@')[0] : user.uid.slice(0, 5)),
+      lastActive: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    console.log("👤 Profile synced to cloud directory.");
+  } catch (e) {
+    console.error("Profile sync failed:", e);
+  }
+}
 
-const mockDiscoverUsers = [];
+async function fetchRealDiscoverUsers() {
+  if (!db) return;
+  const listEl = document.getElementById('discover-list');
+  listEl.innerHTML = '<div class="loading-spinner" style="margin:20px auto;"></div>';
 
-let followingSet = new Set();
-let discoverFilteredUsers = [...mockDiscoverUsers];
+  try {
+    const snapshot = await db.collection('users').limit(20).get();
+    const users = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.uid !== (JSON.parse(localStorage.getItem('privateai_session')) || {}).uid) {
+        users.push({
+          id: data.uid,
+          name: data.name,
+          handle: data.handle,
+          bio: 'Real User on Private AI',
+          avatar: data.photo || '👤',
+          color: '#5E5CE6',
+          followers: 0,
+          following: followingSet.has(data.uid)
+        });
+      }
+    });
+    
+    // Update the UI
+    discoverFilteredUsers = users;
+    renderDiscover();
+  } catch (e) {
+    console.error("Discovery failed:", e);
+    listEl.innerHTML = '<p style="text-align:center; opacity:0.6;">Unable to find users right now.</p>';
+  }
+}
+// --- END DISCOVERY ENGINE ---
+
+function renderDiscover() {
+  const listEl = document.getElementById('discover-list');
+  if (discoverFilteredUsers.length === 0) {
+    listEl.innerHTML = '<p style="text-align:center; padding:40px; opacity:0.5;">No users found yet. Invite friends to join!</p>';
+    return;
+  }
+  listEl.innerHTML = '';
+
+  discoverFilteredUsers.forEach(user => {
+    const isFollowing = followingSet.has(user.id);
+    const card = document.createElement('div');
+    card.className = 'discover-card';
+    card.innerHTML = `
+      <div class="discover-avatar" style="background: linear-gradient(135deg, ${user.color}88, ${user.color}44);">
+        ${user.avatar}
+      </div>
+      <div class="discover-info">
+        <div class="discover-name">${user.name}</div>
+        <div class="discover-handle">${user.handle} · ${formatFollowers(user.followers)} followers</div>
+        <div class="discover-bio">${user.bio}</div>
+      </div>
+      <button class="follow-btn ${isFollowing ? 'following' : ''}" onclick="toggleFollow('${user.id}', this)">
+        ${isFollowing ? 'Following' : 'Follow'}
+      </button>
+    `;
+    listEl.appendChild(card);
+  });
+}
 
 function saveFollowing() {
   localStorage.setItem('privateai_following', JSON.stringify(Array.from(followingSet)));
