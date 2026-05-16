@@ -1329,7 +1329,7 @@ function formatFollowers(n) {
 }
 
 function toggleFollow(userId, btn) {
-  const user = mockDiscoverUsers.find(u => u.id === userId);
+  const user = discoverFilteredUsers.find(u => u.id === userId);
   if (!user) return;
 
   if (followingSet.has(userId)) {
