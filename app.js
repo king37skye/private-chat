@@ -327,7 +327,41 @@ async function loadChatHistories() {
   const savedChats = localStorage.getItem('privateai_chats_v2');
   if (savedChats) {
     const decrypted = await decryptData(savedChats);
-    if (decrypted) mockChatHistories = decrypted;
+    if (decrypted) {
+      mockChatHistories = decrypted;
+
+      // Reconstruct contacts from chat histories so they stay in the chat tab on refresh
+      for (const partnerId of Object.keys(mockChatHistories)) {
+        if (partnerId && partnerId !== 'null' && partnerId !== 'undefined') {
+          const history = mockChatHistories[partnerId];
+          const lastMsg = history[history.length - 1];
+
+          if (!mockContacts.find(c => c.id === partnerId)) {
+            const newContact = {
+              id: partnerId,
+              name: 'Secure Chat',
+              avatar: '👤',
+              lastMessage: lastMsg ? lastMsg.text : 'Tap to start a secure chat',
+              time: lastMsg ? lastMsg.time : 'Now',
+              unread: 0
+            };
+            mockContacts.push(newContact);
+
+            if (db) {
+              db.collection('users').doc(partnerId).get().then(userDoc => {
+                if (userDoc.exists) {
+                  const data = userDoc.data();
+                  newContact.name = data.name || newContact.name;
+                  newContact.avatar = data.photo || '👤';
+                  renderContacts();
+                }
+              });
+            }
+          }
+        }
+      }
+      renderContacts();
+    }
   }
 
   const savedAIChats = localStorage.getItem('privateai_ai_chats_v2');
@@ -1333,6 +1367,33 @@ function saveFollowing() {
 function loadFollowing() {
   const saved = JSON.parse(localStorage.getItem('privateai_following') || '[]');
   followingSet = new Set(saved);
+
+  // Reconstruct followed contacts so they stay in the chat tab on refresh
+  followingSet.forEach(partnerId => {
+    if (!mockContacts.find(c => c.id === partnerId)) {
+      const newContact = {
+        id: partnerId,
+        name: 'Secure Contact',
+        avatar: '👤',
+        lastMessage: 'Tap to start a secure chat',
+        time: 'Now',
+        unread: 0
+      };
+      mockContacts.push(newContact);
+
+      if (db) {
+        db.collection('users').doc(partnerId).get().then(userDoc => {
+          if (userDoc.exists) {
+            const data = userDoc.data();
+            newContact.name = data.name || newContact.name;
+            newContact.avatar = data.photo || '👤';
+            renderContacts();
+          }
+        });
+      }
+    }
+  });
+  renderContacts();
 }
 
 function renderDiscoverPage() {
