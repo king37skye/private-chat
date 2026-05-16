@@ -781,7 +781,7 @@ async function sendMessage() {
     // Fetch link preview if URL found
     if (detectedUrl) fetchLinkPreview(detectedUrl, newMsg.id, aiContainer);
 
-    processAIQuery(text);
+    processAIQuery(text, targetAI.id);
   }
 }
 
@@ -1102,40 +1102,13 @@ function shareWithAI() {
 }
 
 // Real AI Processing via Secure Backend
-async function processAIQuery(query) {
-  aiContainer.appendChild(typingIndicator);
-  typingIndicator.classList.add('active');
-  scrollToBottom(aiContainer);
-
-  const overlay = document.getElementById('processing-overlay');
-  overlay.classList.add('active');
-
-  const systemInstruction = currentActiveAI ? currentActiveAI.role : mockAIs[0].role;
-  const prompt = `${systemInstruction}\n\nUser Query: ${query}`;
-
-  try {
-    const response = await fetch(`/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ prompt })
-    });
-
-    overlay.classList.remove('active');
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    deliverAIResponse(data.text, "Secure Backend");
-
-  } catch (error) {
-    overlay.classList.remove('active');
-    console.error("AI Routing Error:", error);
-    deliverAIResponse("Backend unavailable or AI processing failed. Secure routing failed.", "Error");
-  }
+async function processAIQuery(prompt, aiId) {
+  // Keeping the UI alive with a mock response for now
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve("The AI Assistant is currently in 'Offline Mode' while we finalize the cloud secure-bridge. I'll be fully active soon! How else can I help you visually test the space?");
+    }, 1500);
+  }).then(text => deliverAIResponse(text, "Secure Backend"));
 }
 
 function deliverAIResponse(text, badge) {
