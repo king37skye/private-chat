@@ -1251,10 +1251,10 @@ function renderDiscover() {
     const card = document.createElement('div');
     card.className = 'discover-card';
     card.innerHTML = `
-      <div class="discover-avatar" style="background: linear-gradient(135deg, ${user.color}88, ${user.color}44);">
+      <div class="discover-avatar" style="background: linear-gradient(135deg, ${user.color}88, ${user.color}44); cursor:pointer;" onclick="openOtherProfile('${user.id}')">
         ${user.avatar}
       </div>
-      <div class="discover-info">
+      <div class="discover-info" onclick="openOtherProfile('${user.id}')" style="cursor:pointer;">
         <div class="discover-name">${user.name}</div>
         <div class="discover-handle">${user.handle} · ${formatFollowers(user.followers)} followers</div>
         <div class="discover-bio">${user.bio}</div>
@@ -1858,6 +1858,8 @@ window.submitPhoneAuth = submitPhoneAuth;
 window.verifyOTP = verifyOTP;
 window.toggleFollow = toggleFollow;
 window.filterDiscover = filterDiscover;
+window.openOtherProfile = openOtherProfile;
+window.startChatFromProfile = startChatFromProfile;
 
 // Start App — check auth first
 window.onload = () => {
