@@ -780,7 +780,11 @@ async function sendMessage() {
     }
     // --- REAL-TIME RELAY END ---
 
-    mockE2EEResponse(newMsg.id);
+    if (!db) {
+      mockE2EEResponse(newMsg.id);
+    } else {
+      simulateReceiptTransitions(newMsg.id);
+    }
   } else {
     const history = mockAIChatHistories[targetAI.id];
     if (!history) return;
@@ -888,6 +892,35 @@ function renderLinkPreview(bubble, data) {
   scrollToBottom(bubble.parentElement);
 }
 
+
+// Simulate local receipt transitions for real chats to maintain premium feel
+function simulateReceiptTransitions(sentMsgId) {
+  const targetId = currentActiveChatId;
+  // Transition to Delivered after 500ms
+  setTimeout(() => {
+    if (!mockChatHistories[targetId]) return;
+    const sentMsg = mockChatHistories[targetId].find(m => m.id === sentMsgId);
+    if (sentMsg) sentMsg.status = 'delivered';
+    const msgEl = document.getElementById(sentMsgId);
+    if (msgEl) {
+      const icon = msgEl.querySelector('.read-receipt svg');
+      if (icon) icon.innerHTML = '<path d="M18 6L7 17l-5-5"></path><path d="M22 10l-6.5 6.5"></path>';
+    }
+  }, 500);
+
+  // Transition to Read after 1500ms
+  setTimeout(() => {
+    if (!mockChatHistories[targetId]) return;
+    const sentMsg = mockChatHistories[targetId].find(m => m.id === sentMsgId);
+    if (sentMsg) sentMsg.status = 'read';
+    const msgEl = document.getElementById(sentMsgId);
+    if (msgEl) {
+      const receipt = msgEl.querySelector('.read-receipt');
+      if (receipt) receipt.classList.add('read');
+    }
+    saveChatHistories();
+  }, 1500);
+}
 
 // Mock standard response
 function mockE2EEResponse(sentMsgId) {
