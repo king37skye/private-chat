@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Private AI</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+</head>
+<!-- =============================================
+     AUTH SCREEN OVERLAY
+     ============================================= -->
+<body>
+<div id="auth-screen">
+  <div class="auth-glow auth-glow-1"></div>
+  <div class="auth-glow auth-glow-2"></div>
+
+  <div class="auth-card">
+    <!-- Logo -->
+    <div class="auth-logo">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+    </div>
+    <h1 class="auth-title">Private AI</h1>
+    <p class="auth-subtitle" id="auth-subtitle">Your encrypted, AI-powered space.</p>
+
+    <!-- Method Toggle: Email | Phone -->
+    <div class="auth-method-tabs">
+      <button class="auth-method-btn active" id="method-email" onclick="setAuthMethod('email')">Email</button>
+      <button class="auth-method-btn" id="method-phone" onclick="setAuthMethod('phone')">Phone</button>
+    </div>
+
+    <!-- Step 1: Email Form -->
+    <div id="auth-form-email">
+      <div class="auth-field" id="field-name" style="display: none;">
+        <label class="auth-label">Full Name</label>
+        <input type="text" id="auth-name" class="auth-input" placeholder="Your name">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">Email Address</label>
+        <input type="email" id="auth-email" class="auth-input" placeholder="you@example.com">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">Password</label>
+        <div class="auth-input-wrap">
+          <input type="password" id="auth-password" class="auth-input" placeholder="Min. 8 characters">
+          <button class="auth-eye-btn" onclick="togglePasswordVisibility()" aria-label="Toggle password">
+            <svg id="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          </button>
+        </div>
+      </div>
+      <p class="auth-error" id="auth-error-email"></p>
+      <button class="auth-submit-btn" id="auth-submit-email" onclick="submitEmailAuth()">
+        <span id="auth-submit-email-text">Continue</span>
+      </button>
+      <p class="auth-switch">
+        <span id="auth-switch-text">Don't have an account?</span>
+        <button class="auth-switch-btn" onclick="toggleAuthMode()">Sign Up</button>
+      </p>
+    </div>
+
+    <!-- Step 1: Phone Form -->
+    <div id="auth-form-phone" style="display: none;">
+      <div class="auth-field">
+        <label class="auth-label">Phone Number</label>
+        <div class="auth-input-wrap" style="gap:8px;">
+          <select class="auth-input" id="auth-country-code" style="flex:0 0 80px; padding-right:4px;">
+            <option value="+1">🇺🇸 +1</option>
+            <option value="+91" selected>🇮🇳 +91</option>
+            <option value="+44">🇬🇧 +44</option>
+            <option value="+61">🇦🇺 +61</option>
+            <option value="+81">🇯🇵 +81</option>
+            <option value="+49">🇩🇪 +49</option>
+          </select>
+          <input type="tel" id="auth-phone" class="auth-input" placeholder="Your number">
+        </div>
+      </div>
+      <p class="auth-error" id="auth-error-phone"></p>
+      <button class="auth-submit-btn" onclick="submitPhoneAuth()">Send OTP</button>
+    </div>
+
+    <!-- Step 2: OTP Verification -->
+    <div id="auth-otp-screen" style="display: none;">
+      <p class="auth-otp-hint" id="auth-otp-hint">We sent a 6-digit code to <strong id="otp-target"></strong></p>
+      <div class="otp-input-group">
+        <input class="otp-box" maxlength="1" type="text" inputmode="numeric" oninput="otpMove(this, 0)">
+        <input class="otp-box" maxlength="1" type="text" inputmode="numeric" oninput="otpMove(this, 1)">
+        <input class="otp-box" maxlength="1" type="text" inputmode="numeric" oninput="otpMove(this, 2)">
+        <input class="otp-box" maxlength="1" type="text" inputmode="numeric" oninput="otpMove(this, 3)">
+        <input class="otp-box" maxlength="1" type="text" inputmode="numeric" oninput="otpMove(this, 4)">
+        <input class="otp-box" maxlength="1" type="text" inputmode="numeric" oninput="otpMove(this, 5)">
+      </div>
+      <p class="auth-otp-hint" style="font-size:0.75rem; margin-top:8px;">Hint: use <strong>123456</strong> for demo</p>
+      <p class="auth-error" id="auth-error-otp"></p>
+      <button class="auth-submit-btn" onclick="verifyOTP()">Verify &amp; Continue</button>
+      <button class="auth-back-link" onclick="showPhoneStep()">← Change number</button>
+    </div>
+
+    <!-- Social Auth Divider -->
+    <div class="auth-divider">
+      <span>OR</span>
+    </div>
+
+    <!-- Google Login -->
+    <button class="auth-google-btn" id="auth-google-btn" onclick="loginWithGoogle()">
+      <svg width="18" height="18" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      <span>Continue with Google</span>
+    </button>
+  </div>
+</div>
+
+<div id="recaptcha-container"></div>
+
+<!-- Mock Google Popup Overlay -->
+<div class="google-popup-overlay" id="google-popup-overlay" style="display: none;">
+  <div class="google-popup">
+    <div class="google-popup-header">
+      <svg width="24" height="24" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      <span>Sign in with Google</span>
+    </div>
+    <div class="google-popup-body">
+      <div class="google-user-account">
+        <div class="google-user-avatar">U</div>
+        <div class="google-user-info">
+          <div class="google-user-name">User Account</div>
+          <div class="google-user-email">user@gmail.com</div>
+        </div>
+      </div>
+      <div class="google-loading-bar">
+        <div class="google-loading-progress"></div>
+      </div>
+      <p class="google-popup-text">Signing you into Private AI...</p>
+    </div>
+  </div>
+</div>
+
+<div id="app-container" class="view-chats">
+    
+    <!-- Top Navigation Shell -->
+    <nav class="glass-nav">
+      <div class="nav-left">
+        <!-- Back Button (Hidden on Contacts View) -->
+        <button id="back-btn" class="back-btn" onclick="closeChat()" style="display: none;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <div class="nav-title-container">
+          <div class="nav-title" id="nav-title">Chats</div>
+          <div class="nav-subtitle" id="nav-subtitle" style="display: none;">Online</div>
+        </div>
+      </div>
+      
+
+
+      <div class="encryption-badge" id="encryption-status">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        Secured
+      </div>
+    </nav>
+
+    <!-- VIEWS CONTAINER -->
+    <div class="views-wrapper">
+      
+      <!-- CONTACTS VIEW -->
+      <div class="view-panel main-panel" id="contacts-view">
+        <div class="main-list-tabs">
+          <button class="main-tab-btn active" id="main-tab-chats" onclick="switchMainTab('chats')">Chats</button>
+          <button class="main-tab-btn" id="main-tab-ais" onclick="switchMainTab('ais')">AIs</button>
+        </div>
+        <div class="search-container">
+          <div class="search-bar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" placeholder="Search">
+          </div>
+        </div>
+        <div id="contacts-list" class="contacts-list">
+          <!-- Contacts injected here by app.js -->
+        </div>
+        <div id="ais-list" class="contacts-list" style="display: none;">
+          <!-- AIs injected here by app.js -->
+        </div>
+      </div>
+
+      <!-- DISCOVER VIEW -->
+      <div class="view-panel main-panel" id="discover-view">
+        <div class="discover-header">
+          <h2 class="discover-title">Discover People</h2>
+          <p class="discover-subtitle">Find and follow people to start secure chats</p>
+          <div class="search-container" style="padding:0; margin-top:16px;">
+            <div class="search-bar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="text" id="discover-search" placeholder="Search people..." oninput="filterDiscover(this.value)">
+            </div>
+          </div>
+        </div>
+        <div id="discover-list" class="contacts-list" style="padding-top:8px;">
+          <!-- Injected by app.js -->
+        </div>
+      </div>
+
+      <!-- PROFILE VIEW -->
+      <div class="view-panel main-panel" id="profile-view">
+        <!-- Profile Hero -->
+        <div class="profile-hero">
+          <div class="profile-avatar-wrap">
+            <div class="profile-avatar" id="profile-avatar-display">?</div>
+            <button class="profile-avatar-edit" onclick="document.getElementById('profile-photo-input').click()" title="Change photo">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 0 2-2l4-4h6l2 2h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+            </button>
+            <input type="file" id="profile-photo-input" accept="image/*" style="display:none" onchange="handleProfilePhoto(event)">
+          </div>
+          <div class="profile-name-section">
+            <div class="profile-display-name" id="profile-display-name">Loading...</div>
+            <div class="profile-handle" id="profile-handle-display">@user</div>
+            <div class="profile-status" id="profile-status-display">Secure & Encrypted</div>
+            <button class="profile-edit-btn" onclick="openProfileEditModal()" style="margin-top: 12px; padding: 8px 20px; border-radius: 20px; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; font-size: 0.85rem; font-weight: 600;">Edit Profile</button>
+          </div>
+          <div class="profile-status-row">
+            <button class="status-pill active" id="status-online" onclick="setStatus('online')">🟢 Online</button>
+            <button class="status-pill" id="status-busy" onclick="setStatus('busy')">🔴 Busy</button>
+            <button class="status-pill" id="status-away" onclick="setStatus('away')">🟡 Away</button>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="profile-stats">
+          <div class="stat-item" onclick="openUserListModal('followers')">
+            <div class="stat-num" id="stat-followers">0</div>
+            <div class="stat-label">Followers</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item" onclick="openUserListModal('following')">
+            <div class="stat-num" id="stat-following">0</div>
+            <div class="stat-label">Following</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-num" id="stat-chats">4</div>
+            <div class="stat-label">Chats</div>
+          </div>
+        </div>
+
+        <!-- Follow Requests -->
+        <div class="profile-section">
+          <div class="profile-section-title">Follow Requests</div>
+          <div id="follow-requests-list" class="follow-requests-list">
+            <!-- Injected by app.js -->
+          </div>
+        </div>
+
+        <!-- Edit Profile -->
+        <div class="profile-section">
+          <div class="profile-section-title">Edit Profile</div>
+          <div class="profile-edit-field">
+            <label class="profile-edit-label">Display Name</label>
+            <input type="text" id="edit-display-name" class="profile-edit-input" placeholder="Your name">
+          </div>
+          <div class="profile-edit-field">
+            <label class="profile-edit-label">Username</label>
+            <input type="text" id="edit-username" class="profile-edit-input" placeholder="@yourhandle">
+          </div>
+          <div class="profile-edit-field">
+            <label class="profile-edit-label">Bio</label>
+            <textarea id="edit-bio" class="profile-edit-input" rows="3" placeholder="Tell people about yourself..."></textarea>
+          </div>
+          <button class="profile-save-btn" onclick="saveProfile()">Save Changes</button>
+        </div>
+
+        <!-- Settings -->
+        <div class="profile-section">
+          <div class="profile-section-title">Settings</div>
+          <div class="settings-list">
+            <button class="settings-item" onclick="openSettingsDetail('privacy')">
+              <div class="settings-item-icon" style="background: rgba(94,92,230,0.2);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5E5CE6" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              </div>
+              <div class="settings-item-text">
+                <div class="settings-item-title">Privacy &amp; Security</div>
+                <div class="settings-item-sub">End-to-end encrypted · Always on</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <button class="settings-item" onclick="openSettingsDetail('notifications')">
+              <div class="settings-item-icon" style="background: rgba(50,173,230,0.2);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#32ADE6" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+              </div>
+              <div class="settings-item-text">
+                <div class="settings-item-title">Notifications</div>
+                <div class="settings-item-sub">Manage alerts and sounds</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <button class="settings-item" onclick="openSettingsDetail('storage')">
+              <div class="settings-item-icon" style="background: rgba(52,199,89,0.2);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34C759" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+              <div class="settings-item-text">
+                <div class="settings-item-title">Storage &amp; Data</div>
+                <div class="settings-item-sub">Local · Zero cloud exposure</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <button class="settings-item" onclick="openSettingsDetail('appearance')">
+              <div class="settings-item-icon" style="background: rgba(255,159,10,0.2);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF9F0A" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+              </div>
+              <div class="settings-item-text">
+                <div class="settings-item-title">Appearance</div>
+                <div class="settings-item-sub">Dark mode · Privacy by design</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Log Out -->
+        <div class="profile-section" style="padding-bottom:100px;">
+          <button class="logout-btn" onclick="logOut()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            Log Out
+          </button>
+        </div>
+
+        <!-- Toast Notification -->
+        <div class="settings-toast" id="settings-toast"></div>
+      </div>
+
+      <!-- ACTIVE CHAT VIEW -->
+      <div class="view-panel chat-view-panel" id="active-chat-view">
+        <!-- No Chat Selected Placeholder (Desktop) -->
+        <div id="no-chat-placeholder" class="no-chat-placeholder">
+          <div class="placeholder-icon">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity: 0.2;">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <h3>Your Private Conversations</h3>
+          <p>Select a contact to start a zero-knowledge encrypted chat.</p>
+        </div>
+
+        <!-- AI Context Selection Banner -->
+        <div class="ai-context-banner" id="ai-context-banner">
+          <span>Select messages to share securely with AI</span>
+          <button class="cancel-selection" onclick="cancelAiSelection()">Cancel</button>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="chat-container" id="chat-container">
+          <!-- Mock Messages injected here -->
+        </div>
+
+        <!-- AI Chat Area -->
+        <div class="chat-container" id="ai-container" style="display: none;">
+          <div class="message-bubble message-ai" style="animation-delay: 0s;">
+            Hello. I am your isolated AI assistant. My processing is confined to this sandbox. I cannot read your private chats unless you explicitly share a message with me.
+            <span class="timestamp">Local Process</span>
+          </div>
+        </div>
+
+        <!-- Typing Indicator -->
+        <div class="typing-indicator" id="typing-indicator">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area" id="input-area">
+          <!-- Hidden file input for attachments -->
+          <input type="file" id="file-input" accept="image/*,video/*,.pdf,.doc,.docx,.txt,.zip" multiple style="display: none;" onchange="handleFileAttachment(event)">
+          <button class="icon-btn attach-btn" id="attach-btn" aria-label="Attach" onclick="document.getElementById('file-input').click()">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+            </svg>
+          </button>
+          <textarea 
+            class="input-box" 
+            id="message-input" 
+            placeholder="Secure Message" 
+            rows="1"
+            oninput="autoResize(this)"
+            onkeydown="handleKeyPress(event)"
+          ></textarea>
+          <div class="input-actions" style="display: flex; align-items: center; gap: 8px;">
+            <button class="icon-btn mic-btn" id="mic-btn" aria-label="Record voice">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+            <button class="send-button" id="send-btn" onclick="sendMessage()" style="display: none;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div> <!-- End Views Wrapper -->
+
+    <!-- Processing Overlay -->
+    <div class="processing-overlay" id="processing-overlay">
+      <div class="processing-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v20"></path>
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+        </svg>
+      </div>
+      <h3>Zero-Knowledge Processing</h3>
+      <p style="font-size: 0.8rem; opacity: 0.7; margin-top: 8px;">Anonymizing and routing securely to Cloud AI...</p>
+    </div>
+
+    <!-- Create AI Modal -->
+    <div class="modal-overlay" id="create-ai-modal">
+      <div class="modal-content">
+        <h3 style="margin-bottom: 16px;">Create Custom AI</h3>
+        <input type="text" id="new-ai-name" class="input-box" placeholder="AI Name (e.g. Code Helper)" style="width:100%; margin-bottom: 12px; height: 44px;">
+        <textarea id="new-ai-role" class="input-box" placeholder="Define its role... (e.g. You are an expert software engineer...)" rows="4" style="width:100%; margin-bottom: 20px;"></textarea>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button class="tab-btn" onclick="closeCreateAIModal()">Cancel</button>
+          <button class="tab-btn active" onclick="saveNewAI()">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- User List Modal (Followers/Following) -->
+    <div class="modal-overlay" id="user-list-modal">
+      <div class="modal-content list-modal">
+        <div class="modal-header">
+          <h3 id="user-list-title">Users</h3>
+          <button class="modal-close" onclick="closeUserListModal()">&times;</button>
+        </div>
+        <div id="user-list-content" class="contacts-list" style="max-height: 400px; overflow-y: auto;">
+          <!-- Injected by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Detail Modal -->
+    <div class="modal-overlay" id="settings-detail-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="settings-detail-title">Settings</h3>
+          <button class="modal-close" onclick="closeSettingsDetail()">&times;</button>
+        </div>
+        <div id="settings-detail-content" style="padding: 20px 0;">
+          <!-- Injected by JS -->
+        </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+          <button class="profile-save-btn" style="width: auto; padding: 10px 24px;" onclick="closeSettingsDetail()">Done</button>
+        </div>
+    
+    <!-- Profile Edit Modal -->
+    <div class="modal-overlay" id="profile-edit-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 style="margin:0;">Edit Profile</h3>
+          <button class="modal-close" onclick="closeProfileEditModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 20px 0;">
+          <div class="auth-field">
+            <label class="auth-label">Display Name</label>
+            <input type="text" id="edit-profile-name" class="auth-input" placeholder="Your name">
+          </div>
+          <div class="auth-field">
+            <label class="auth-label">Bio</label>
+            <textarea id="edit-profile-bio" class="auth-input" style="height: 80px; resize: none; margin-top: 8px;" placeholder="Tell us about yourself..."></textarea>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+          <button class="profile-save-btn" style="background: rgba(255,255,255,0.1); color: #fff; width: auto; padding: 10px 24px;" onclick="closeProfileEditModal()">Cancel</button>
+          <button class="profile-save-btn" style="width: auto; padding: 10px 24px;" onclick="saveProfileEdits()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+      </div>
+    </div>
+    
+    <!-- Context Menu Overlay -->
+    <div class="context-menu-overlay" id="context-menu-overlay" style="display: none;" onclick="closeContextMenu()">
+      <div class="context-menu-content" id="context-menu-content">
+        <button class="context-item" onclick="copySelectedMessage(event)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          Copy Text
+        </button>
+        <button class="context-item" onclick="enterSelectionMode(event)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+          Select Multiple
+        </button>
+        <button class="context-item" id="context-share-ai" onclick="shareSelectedWithAI(event)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+          Share with AI
+        </button>
+        <div class="context-divider"></div>
+        <button class="context-item delete" onclick="deleteSelectedMessage(event)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAVIGATION BAR -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <button class="bottom-nav-btn active" id="bnav-chats" onclick="switchMainView('chats')">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+      <span>Chats</span>
+    </button>
+    <button class="bottom-nav-btn" id="bnav-discover" onclick="switchMainView('discover')">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+      <span>Discover</span>
+    </button>
+    <button class="bottom-nav-btn" id="bnav-profile" onclick="switchMainView('profile')" style="position: relative;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      <span>Profile</span>
+      <div id="profile-notif-badge" class="notif-badge" style="display: none;"></div>
+    </button>
+  </nav>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
