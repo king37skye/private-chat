@@ -1131,36 +1131,43 @@ function deliverAIResponse(text, badge) {
 
 let currentMainView = 'chats';
 
-function switchMainView(view) {
+function showTab(view) {
+  // Map 'chat' from HTML to 'chats' in JS
+  const internalView = view === 'chat' ? 'chats' : view;
+  
   // If we are in a chat, close it when switching to Discover or Profile
-  if (view !== 'chats' && currentActiveChatId) {
+  if (internalView !== 'chats' && currentActiveChatId) {
     closeChat();
   }
 
-  currentMainView = view;
+  currentMainView = internalView;
 
   // Update classes on appContainer for CSS targeting
   ['view-chats', 'view-discover', 'view-profile'].forEach(c => appContainer.classList.remove(c));
-  appContainer.classList.add(`view-${view}`);
+  appContainer.classList.add(`view-${internalView}`);
 
-  // Update all main panels visibility — all use flex (view-panel is flex column)
+  // Update all main panels visibility
   const panels = { chats: 'contacts-view', discover: 'discover-view', profile: 'profile-view' };
   Object.entries(panels).forEach(([key, id]) => {
-    document.getElementById(id).style.display = key === view ? 'flex' : 'none';
+    const el = document.getElementById(id);
+    if (el) el.style.display = key === internalView ? 'flex' : 'none';
   });
 
   // Update nav title
   const titles = { chats: 'Chats', discover: 'Discover', profile: 'Profile' };
-  document.getElementById('nav-title').textContent = titles[view];
+  const titleEl = document.getElementById('nav-title');
+  if (titleEl) titleEl.textContent = titles[internalView];
 
   // Update bottom nav active state
   ['chats', 'discover', 'profile'].forEach(v => {
-    document.getElementById(`bnav-${v}`).classList.toggle('active', v === view);
+    const navId = v === 'chats' ? 'bnav-chats' : `bnav-${v}`;
+    const el = document.getElementById(navId);
+    if (el) el.classList.toggle('active', v === internalView);
   });
 
   // Load the appropriate view content
-  if (view === 'discover') renderDiscoverPage();
-  if (view === 'profile') loadProfilePage();
+  if (internalView === 'discover') fetchRealDiscoverUsers();
+  if (internalView === 'profile') loadProfilePage();
 }
 
 // --- REAL-TIME DISCOVERY ENGINE ---
@@ -1821,7 +1828,7 @@ function logOut() {
   }
 }
 
-// Expose functions to global window to ensure onclick works every time
+// Expose functions to global window at the very end to ensure they are defined
 window.logOut = logOut;
 window.showTab = showTab;
 window.submitEmailAuth = submitEmailAuth;
@@ -1831,7 +1838,7 @@ window.verifyOTP = verifyOTP;
 window.toggleFollow = toggleFollow;
 window.filterDiscover = filterDiscover;
 
-// Start App — check auth first, then init if session exists
+// Start App — check auth first
 window.onload = () => {
   checkAuthSession();
 };
