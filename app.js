@@ -274,9 +274,11 @@ async function getDeviceKey(customKeyMaterial) {
   }
 
   const encoder = new TextEncoder();
-  const rawKey = encoder.encode(keyMaterial);
+  // Hash the key material using SHA-256 to produce an exact 32-byte (256-bit) raw key for AES-GCM
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(keyMaterial));
+  
   return crypto.subtle.importKey(
-    "raw", rawKey, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]
+    "raw", hashBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]
   );
 }
 
