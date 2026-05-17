@@ -352,8 +352,6 @@ async function decryptFile(arrayBuffer, customKeyMaterial) {
   }
 }
 
-}
-
 // Dynamic Circular Progress Ring updates
 function updateTransferCircleProgress(percentage, textStatus = "Processing...", customPercentText = null) {
   const circle = document.getElementById('transfer-progress-circle');
