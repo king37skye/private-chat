@@ -538,6 +538,41 @@ function openChat(profile, isAIProfile = false) {
     renderContacts();
   }
 
+  // Send read receipts back to the partner for all unread messages
+  if (db && !isAIProfile) {
+    const mySession = JSON.parse(localStorage.getItem('privateai_session') || '{}');
+    const myUid = mySession.uid;
+    const historyList = mockChatHistories[profile.id] || [];
+
+    let hasUnread = false;
+    historyList.forEach(msg => {
+      if (msg.sender === 'them' && msg.originalId && !msg.isReadByMe) {
+        msg.isReadByMe = true;
+        hasUnread = true;
+
+        db.collection('relay').add({
+          to: profile.id, // Recipient's UID
+          from: myUid,    // My UID
+          type: 'receipt',
+          msgId: msg.originalId,
+          status: 'read',
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    });
+
+    if (hasUnread) {
+      saveChatHistories();
+    }
+
+    // Reset unread count for this contact
+    const contact = mockContacts.find(c => c.id === profile.id);
+    if (contact && contact.unread > 0) {
+      contact.unread = 0;
+      renderContacts();
+    }
+  }
+
   container.innerHTML = '';
 
   // Render history with grouping
@@ -723,12 +758,21 @@ function appendMessageToDOM(msg, container, isPrevSame = false, isNextSame = fal
   timeSpan.className = 'timestamp';
 
   if (msg.sender === 'me' && container === chatContainer) {
-    const isRead = msg.status === 'read';
-    const statusIcon = isRead
-      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="read"><path d="M18 6L7 17l-5-5"></path><path d="M22 10l-6.5 6.5"></path></svg>`
-      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>`;
+    let statusIcon = '';
+    let receiptClass = msg.status || 'sent';
 
-    timeSpan.innerHTML = `${msg.time} <span class="read-receipt ${msg.status || 'sent'}">${statusIcon}</span>`;
+    if (msg.status === 'read') {
+      statusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L7 17l-5-5"></path><path d="M22 10l-6.5 6.5"></path></svg>`;
+      receiptClass = 'read';
+    } else if (msg.status === 'delivered') {
+      statusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L7 17l-5-5"></path><path d="M22 10l-6.5 6.5"></path></svg>`;
+      receiptClass = 'delivered';
+    } else {
+      statusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>`;
+      receiptClass = 'sent';
+    }
+
+    timeSpan.innerHTML = `${msg.time} <span class="read-receipt ${receiptClass}">${statusIcon}</span>`;
   } else {
     timeSpan.textContent = msg.time;
   }
@@ -812,6 +856,7 @@ async function sendMessage() {
           to: targetChatId, // Recipient's UID
           from: myUid,      // Sender's UID
           packet: encryptedPacket,
+          msgId: newMsg.id, // Include the message ID!
           timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
       }
@@ -822,8 +867,6 @@ async function sendMessage() {
 
     if (!db) {
       mockE2EEResponse(newMsg.id);
-    } else {
-      simulateReceiptTransitions(newMsg.id);
     }
   } else {
     const history = mockAIChatHistories[targetAI.id];
@@ -1703,7 +1746,46 @@ function startRelayListener() {
       for (const change of snapshot.docChanges()) {
         if (change.type === 'added') {
           const doc = change.doc;
-          const { from, packet } = doc.data();
+          const { from, packet, msgId, type, status } = doc.data();
+
+          if (type === 'receipt') {
+            // Update E2EE ticks in local history and DOM!
+            const history = mockChatHistories[from];
+            if (history) {
+              const msg = history.find(m => m.id === msgId);
+              if (msg) {
+                if (msg.status !== 'read') {
+                  msg.status = status;
+                }
+                saveChatHistories();
+
+                if (currentActiveChatId === from) {
+                  const msgEl = document.getElementById(msgId);
+                  if (msgEl) {
+                    const icon = msgEl.querySelector('.read-receipt svg');
+                    const receipt = msgEl.querySelector('.read-receipt');
+
+                    if (status === 'delivered') {
+                      if (icon) icon.innerHTML = '<path d="M18 6L7 17l-5-5"></path><path d="M22 10l-6.5 6.5"></path>';
+                      if (receipt) {
+                        receipt.classList.remove('sent', 'read');
+                        receipt.classList.add('delivered');
+                      }
+                    } else if (status === 'read') {
+                      if (icon) icon.innerHTML = '<path d="M18 6L7 17l-5-5"></path><path d="M22 10l-6.5 6.5"></path>';
+                      if (receipt) {
+                        receipt.classList.remove('sent', 'delivered');
+                        receipt.classList.add('read');
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            // Delete receipt from cloud immediately (Privacy-First)
+            doc.ref.delete();
+            continue;
+          }
 
           // Decrypt the incoming packet using shared E2EE chat key
           const sharedSecret = [myUid, from].sort().join('_');
@@ -1711,9 +1793,11 @@ function startRelayListener() {
           if (decrypted) {
             const incomingMsg = {
               id: 'm_relay_' + doc.id,
+              originalId: msgId, // Store sender's original message ID
               text: decrypted.text,
               sender: 'them',
-              time: decrypted.time
+              time: decrypted.time,
+              isReadByMe: currentActiveChatId === from
             };
 
             // Save to local history
@@ -1758,6 +1842,18 @@ function startRelayListener() {
               scrollToBottom(chatContainer);
             }
             saveChatHistories();
+
+            // Send back E2EE delivery/read receipt immediately
+            if (db) {
+              db.collection('relay').add({
+                to: from, // Send back to original sender
+                from: myUid,
+                type: 'receipt',
+                msgId: msgId,
+                status: currentActiveChatId === from ? 'read' : 'delivered',
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+              });
+            }
           }
 
           // Delete from cloud immediately after processing (Privacy-First)
