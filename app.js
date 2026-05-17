@@ -355,17 +355,33 @@ async function decryptFile(arrayBuffer, customKeyMaterial) {
 }
 
 // Dynamic Circular Progress Ring updates
-function updateTransferCircleProgress(percentage, textStatus = "Processing...") {
+function updateTransferCircleProgress(percentage, textStatus = "Processing...", customPercentText = null) {
   const circle = document.getElementById('transfer-progress-circle');
   const txt = document.getElementById('transfer-progress-text');
   const title = document.getElementById('transfer-title');
+
   if (circle) {
-    const dashoffset = 314.16 - (percentage / 100) * 314.16;
-    circle.style.strokeDashoffset = dashoffset;
+    if (percentage > 0 && percentage <= 100) {
+      // Scale from 5% minimum to 100% so it always shows progress!
+      const activeProgress = 5 + (percentage * 0.95);
+      const dashoffset = 314.16 - (activeProgress / 100) * 314.16;
+      circle.style.strokeDashoffset = dashoffset;
+      circle.classList.remove('indeterminate-spinner');
+    } else {
+      // Indeterminate/unknown progress: animate the circle as a continuous spinner!
+      circle.style.strokeDashoffset = 240; // partial arc
+      circle.classList.add('indeterminate-spinner');
+    }
   }
+
   if (txt) {
-    txt.textContent = Math.round(percentage) + '%';
+    if (customPercentText) {
+      txt.textContent = customPercentText;
+    } else {
+      txt.textContent = Math.round(percentage) + '%';
+    }
   }
+
   if (title) {
     title.textContent = textStatus;
   }
@@ -416,7 +432,13 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
     // ----------------------------------------------------
     const file = msgIdOrFile; // passed in as the file object
     filename.textContent = file.name;
-    updateTransferCircleProgress(0, "Encrypting locally...");
+    
+    // Simulate active encryption progress immediately so it doesn't freeze at 0%!
+    let simulatedProgress = 0;
+    const progressTimer = setInterval(() => {
+      simulatedProgress = Math.min(simulatedProgress + 3, 19);
+      updateTransferCircleProgress(simulatedProgress, "On-device local E2EE securing...", `${Math.round(simulatedProgress)}%`);
+    }, 120);
 
     try {
       const targetChatId = currentActiveChatId;
@@ -433,9 +455,11 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
       });
 
       // 2. Encrypt locally (AES-GCM E2EE)
-      updateTransferCircleProgress(20, "Securing payload...");
       const encryptedBuffer = await encryptFile(arrayBuffer, sharedSecret);
       const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
+
+      clearInterval(progressTimer);
+      updateTransferCircleProgress(20, "Establishing secure cloud tunnel...", "20%");
 
       // 3. Upload encrypted Blob to Firebase Storage
       if (db) {
@@ -508,6 +532,7 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
         );
       }
     } catch (err) {
+      clearInterval(progressTimer);
       console.error("Bulk encryption failed:", err);
       updateTransferCircleProgress(0, "Error Encrypting");
     }
@@ -553,8 +578,12 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
           loaded += value.length;
 
           if (total > 0) {
-            const downloadProgress = (loaded / total) * 90; // Up to 90%
+            const downloadProgress = 10 + ((loaded / total) * 80); // 10% to 90%
             updateTransferCircleProgress(downloadProgress, "Downloading E2EE stream...");
+          } else {
+            // Indeterminate download (missing headers/CORS): show MB downloaded inside circle!
+            const downloadedMb = (loaded / (1024 * 1024)).toFixed(1);
+            updateTransferCircleProgress(0, "Streaming secure bits...", `${downloadedMb}M`);
           }
         }
 

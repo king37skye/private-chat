@@ -2482,3 +2482,15 @@ video.attachment-image {
   background: rgba(255, 255, 255, 0.15);
   color: #fff;
 }
+
+/* Indeterminate Spinner Animation for Progress Circle */
+.indeterminate-spinner {
+  animation: spin-stroke 1.8s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes spin-stroke {
+  0% { transform: rotate(0deg); stroke-dashoffset: 314.16; }
+  50% { stroke-dashoffset: 80; }
+  100% { transform: rotate(360deg); stroke-dashoffset: 314.16; }
+}
