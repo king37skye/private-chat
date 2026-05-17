@@ -524,31 +524,56 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
       updateTransferCircleProgress(20, "Establishing secure cloud tunnel...", "20%");
 
       // 3. Upload encrypted Blob to Firebase Storage
+      let uploadSuccessful = false;
+      let fallbackActivated = false;
+
       if (db) {
         const storageRef = firebase.storage().ref().child('chats/' + msgId + '_' + file.name);
         const metadata = { contentType: file.type || 'application/octet-stream' };
         const uploadTask = storageRef.put(encryptedBlob, metadata);
 
-        // Stuck detector: alert user if Firebase Storage CORS/preflight is blocked under file:///
-        const stuckTimer = setTimeout(() => {
-          const title = document.getElementById('transfer-title');
-          if (title && title.textContent === "Uploading securely...") {
-            title.textContent = "Negotiating secure link (stuck? check CORS/Storage Rules)...";
+        // Stuck detector / CORS Self-Healing Fallback:
+        // If preflight/CORS blocks the upload for more than 4.5 seconds, auto-switch to Firestore Chunk Relay!
+        const stuckTimer = setTimeout(async () => {
+          if (!uploadSuccessful && !fallbackActivated) {
+            fallbackActivated = true;
+            try {
+              console.warn("⚠️ Firebase Storage CORS/preflight blocked. Activating Firestore E2EE Chunk Relay...");
+              uploadTask.cancel(); // Abort the stuck task
+              await performFirestoreChunkUpload(msgId, encryptedBuffer, file.name, file.type, arrayBuffer, senderName, targetChatId, now);
+            } catch (fallbackErr) {
+              console.error("Firestore Chunk Relay failed:", fallbackErr);
+              updateTransferCircleProgress(0, "Secure Transfer Failed");
+            }
           }
-        }, 6000);
+        }, 4500);
 
         uploadTask.on('state_changed',
           (snapshot) => {
+            if (snapshot.bytesTransferred > 0) {
+              uploadSuccessful = true;
+              clearTimeout(stuckTimer);
+            }
             const progress = 20 + ((snapshot.bytesTransferred / snapshot.totalBytes) * 80);
             updateTransferCircleProgress(progress, "Uploading securely...");
           },
-          (error) => {
+          async (error) => {
             clearTimeout(stuckTimer);
-            console.error("Bulk upload failed:", error);
-            updateTransferCircleProgress(0, `Upload Error: ${error.code || error.message || 'Access Blocked'}`);
+            if (fallbackActivated) return; // Skip if already fell back
+            
+            console.warn("Bulk upload storage failed, trying Firestore Chunk fallback:", error);
+            fallbackActivated = true;
+            try {
+              await performFirestoreChunkUpload(msgId, encryptedBuffer, file.name, file.type, arrayBuffer, senderName, targetChatId, now);
+            } catch (fallbackErr) {
+              updateTransferCircleProgress(0, `Upload Error: ${error.code || error.message || 'Access Blocked'}`);
+            }
           },
           async () => {
+            uploadSuccessful = true;
             clearTimeout(stuckTimer);
+            if (fallbackActivated) return;
+
             const downloadUrl = await storageRef.getDownloadURL();
             updateTransferCircleProgress(100, "Secure Link Active!");
 
@@ -634,42 +659,81 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
 
       // 1. If not cached, download and decrypt
       if (!objectUrl) {
-        updateTransferCircleProgress(10, "Fetching secure payload...");
+        let decryptedBuffer;
 
-        // Progressive stream download for accuracy!
-        const response = await fetch(msg.file.url);
-        const contentLength = response.headers.get('content-length');
-        const total = contentLength ? parseInt(contentLength, 10) : 0;
-        let loaded = 0;
-
-        const reader = response.body.getReader();
-        const chunks = [];
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-          loaded += value.length;
-
-          if (total > 0) {
-            const downloadProgress = 10 + ((loaded / total) * 80); // 10% to 90%
-            updateTransferCircleProgress(downloadProgress, "Downloading E2EE stream...");
-          } else {
-            // Indeterminate download (missing headers/CORS): show MB downloaded inside circle!
-            const downloadedMb = (loaded / (1024 * 1024)).toFixed(1);
-            updateTransferCircleProgress(0, "Streaming secure bits...", `${downloadedMb}M`);
+        if (msg.file.isFirestoreChunked || (msg.file.url && msg.file.url.startsWith('firestore_chunked://'))) {
+          // FIRESTORE CHUNK RELAY DOWNLOAD FLOW (CORS-free, WebSocket speed!)
+          updateTransferCircleProgress(10, "Establishing E2EE secure tunnel...");
+          
+          const metaDoc = await db.collection('transfers').doc(msgId).get();
+          if (!metaDoc.exists) throw new Error("Secure transfer metadata not found");
+          
+          const meta = metaDoc.data();
+          const numChunks = meta.chunksCount;
+          const chunks = [];
+          
+          for (let i = 0; i < numChunks; i++) {
+            const chunkDoc = await db.collection('transfers').doc(msgId).collection('chunks').doc(String(i)).get();
+            if (!chunkDoc.exists) throw new Error(`Missing secure E2EE chunk ${i}`);
+            
+            const firestoreBlob = chunkDoc.data().data;
+            chunks.push(firestoreBlob.toUint8Array());
+            
+            const downloadProgress = 10 + (((i + 1) / numChunks) * 80);
+            updateTransferCircleProgress(downloadProgress, `Assembling secure stream chunk ${i+1}/${numChunks}...`);
           }
+          
+          // Merge chunks
+          const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+          const allChunks = new Uint8Array(totalLength);
+          let position = 0;
+          for (const chunk of chunks) {
+            allChunks.set(chunk, position);
+            position += chunk.length;
+          }
+          
+          updateTransferCircleProgress(90, "Decrypting E2EE container...");
+          decryptedBuffer = await decryptFile(allChunks.buffer, sharedSecret);
+        } else {
+          // STANDARD FIREBASE STORAGE DOWNLOAD FLOW
+          updateTransferCircleProgress(10, "Fetching secure payload...");
+
+          // Progressive stream download for accuracy!
+          const response = await fetch(msg.file.url);
+          const contentLength = response.headers.get('content-length');
+          const total = contentLength ? parseInt(contentLength, 10) : 0;
+          let loaded = 0;
+
+          const reader = response.body.getReader();
+          const chunks = [];
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            loaded += value.length;
+
+            if (total > 0) {
+              const downloadProgress = 10 + ((loaded / total) * 80); // 10% to 90%
+              updateTransferCircleProgress(downloadProgress, "Downloading E2EE stream...");
+            } else {
+              // Indeterminate download (missing headers/CORS): show MB downloaded inside circle!
+              const downloadedMb = (loaded / (1024 * 1024)).toFixed(1);
+              updateTransferCircleProgress(0, "Streaming secure bits...", `${downloadedMb}M`);
+            }
+          }
+
+          // Merge binary chunks
+          const allChunks = new Uint8Array(loaded);
+          let position = 0;
+          for (const chunk of chunks) {
+            allChunks.set(chunk, position);
+            position += chunk.length;
+          }
+
+          updateTransferCircleProgress(90, "Decrypting securely...");
+          decryptedBuffer = await decryptFile(allChunks.buffer, sharedSecret);
         }
 
-        // Merge binary chunks
-        const allChunks = new Uint8Array(loaded);
-        let position = 0;
-        for (const chunk of chunks) {
-          allChunks.set(chunk, position);
-          position += chunk.length;
-        }
-
-        updateTransferCircleProgress(90, "Decrypting securely...");
-        const decryptedBuffer = await decryptFile(allChunks.buffer, sharedSecret);
         if (!decryptedBuffer) throw new Error("Decryption failed");
 
         const decryptedBlob = new Blob([decryptedBuffer], { type: msg.file.type });
@@ -726,6 +790,99 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
       updateTransferCircleProgress(0, "❌ Failed Decrypting");
     }
   }
+}
+
+// Standalone Firestore E2EE Chunk Upload Helper (CORS-free Self-Healing Fallback)
+async function performFirestoreChunkUpload(msgId, encryptedBuffer, fileName, fileType, originalArrayBuffer, senderName, targetChatId, now) {
+  const CHUNK_SIZE = 800 * 1024; // 800 KB chunks (guaranteed under 1MB Firestore limit)
+  const totalBytes = encryptedBuffer.byteLength;
+  const numChunks = Math.ceil(totalBytes / CHUNK_SIZE);
+  
+  updateTransferCircleProgress(20, "Activating Firestore E2EE Relay...", "20%");
+  
+  // 1. Write the transfer metadata document
+  await db.collection('transfers').doc(msgId).set({
+    id: msgId,
+    name: fileName,
+    type: fileType,
+    size: totalBytes,
+    chunksCount: numChunks,
+    isFirestoreChunked: true,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  const view = new Uint8Array(encryptedBuffer);
+  
+  // 2. Write each chunk to the subcollection as a binary Firestore Blob
+  for (let i = 0; i < numChunks; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, totalBytes);
+    const chunkData = view.slice(start, end);
+    const firestoreBlob = firebase.firestore.Blob.fromUint8Array(chunkData);
+    
+    await db.collection('transfers').doc(msgId).collection('chunks').doc(String(i)).set({
+      index: i,
+      data: firestoreBlob
+    });
+    
+    // Scale chunk progress from 25% to 95%
+    const progress = 25 + (((i + 1) / numChunks) * 70);
+    updateTransferCircleProgress(progress, `Syncing secure E2EE chunk ${i+1}/${numChunks}...`);
+  }
+  
+  updateTransferCircleProgress(100, "Secure Link Active!");
+  
+  // Create dynamic Blob URL for local instant viewer
+  const objectUrl = URL.createObjectURL(new Blob([originalArrayBuffer], { type: fileType }));
+  
+  // Save to chat history locally
+  const fileMsg = {
+    id: msgId,
+    text: `📂 Bulk Transfer: ${fileName}`,
+    sender: 'me',
+    time: now,
+    status: 'sent',
+    file: {
+      name: fileName,
+      size: totalBytes,
+      type: fileType,
+      url: `firestore_chunked://${msgId}`,
+      localUrl: objectUrl,
+      isBulky: true,
+      isFirestoreChunked: true
+    }
+  };
+  
+  if (!mockChatHistories[targetChatId]) mockChatHistories[targetChatId] = [];
+  mockChatHistories[targetChatId].push(fileMsg);
+  saveChatHistories();
+  
+  appendMessageToDOM(fileMsg, chatContainer);
+  scrollToBottom(chatContainer);
+  
+  // Send E2EE meta packet through the Firestore database relay
+  const sharedSecret = [firebase.auth().currentUser.uid, targetChatId].sort().join('_');
+  const encryptedPacket = await encryptData({
+    type: 'file',
+    name: fileName,
+    size: totalBytes,
+    mimeType: fileType,
+    url: `firestore_chunked://${msgId}`,
+    senderHandle: senderName,
+    time: now,
+    isBulky: true,
+    isFirestoreChunked: true
+  }, sharedSecret);
+  
+  await db.collection('relay').add({
+    to: targetChatId,
+    from: firebase.auth().currentUser.uid,
+    packet: encryptedPacket,
+    msgId: msgId,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  
+  setTimeout(closeTransferView, 1000);
 }
 
 async function saveChatHistories() {
