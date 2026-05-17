@@ -316,6 +316,112 @@ async function decryptData(encryptedString, customKeyMaterial) {
   }
 }
 
+async function encryptFile(arrayBuffer, customKeyMaterial) {
+  const key = await getDeviceKey(customKeyMaterial);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    key,
+    arrayBuffer
+  );
+
+  // Return a package with IV prepended so it can be uploaded as a single binary stream!
+  // Prepended layout: [12 bytes IV] + [encrypted data]
+  const packageBuffer = new Uint8Array(12 + encrypted.byteLength);
+  packageBuffer.set(iv, 0);
+  packageBuffer.set(new Uint8Array(encrypted), 12);
+  return packageBuffer.buffer;
+}
+
+async function decryptFile(arrayBuffer, customKeyMaterial) {
+  try {
+    const key = await getDeviceKey(customKeyMaterial);
+    const fullView = new Uint8Array(arrayBuffer);
+    const iv = fullView.slice(0, 12);
+    const data = fullView.slice(12);
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: iv },
+      key,
+      data
+    );
+    return decrypted;
+  } catch (e) {
+    console.error("File decryption failed:", e);
+    return null;
+  }
+}
+
+async function downloadAndDecryptFile(msgId, url, name, type, partnerId, isAutoMedia = false) {
+  const container = document.getElementById(`decrypt_${msgId}`);
+  if (!isAutoMedia && container) {
+    container.innerHTML = `
+      <div class="spinner" style="margin-right:8px;"></div>
+      <span style="font-size:0.75rem;">Decrypting locally...</span>
+    `;
+  }
+
+  try {
+    const mySession = JSON.parse(localStorage.getItem('privateai_session') || '{}');
+    const myUid = mySession.uid;
+    const sharedSecret = [myUid, partnerId].sort().join('_');
+
+    // 1. Download encrypted array buffer
+    const response = await fetch(url);
+    const encryptedBuffer = await response.arrayBuffer();
+
+    // 2. Decrypt locally using E2EE shared secret
+    const decryptedBuffer = await decryptFile(encryptedBuffer, sharedSecret);
+    if (!decryptedBuffer) throw new Error("Decryption failed");
+
+    // 3. Create object URL for local blob
+    const decryptedBlob = new Blob([decryptedBuffer], { type: type });
+    const objectUrl = URL.createObjectURL(decryptedBlob);
+
+    // Save to local cache in history so it doesn't need to be decrypted again!
+    const history = mockChatHistories[partnerId];
+    if (history) {
+      const msg = history.find(m => m.id === msgId);
+      if (msg && msg.file) {
+        msg.file.localUrl = objectUrl;
+        saveChatHistories();
+      }
+    }
+
+    // 4. Update the DOM
+    const bubble = document.getElementById(msgId);
+    if (bubble) {
+      const contentDiv = bubble.querySelector('.message-content');
+      const isImg = type.startsWith('image/');
+      const isVid = type.startsWith('video/');
+      const ext = name.split('.').pop().toUpperCase();
+
+      if (isImg) {
+        contentDiv.innerHTML = `<img src="${objectUrl}" class="attachment-image" onclick="openImagePreview('${objectUrl}')">`;
+      } else if (isVid) {
+        contentDiv.innerHTML = `<video src="${objectUrl}" class="attachment-image" controls></video>`;
+      } else {
+        contentDiv.innerHTML = `
+          <div class="file-card-inner">
+            <div class="file-icon" style="background:#30D158; padding:6px 10px; border-radius:6px; color:#fff; font-weight:bold; font-size:0.75rem; margin-right:10px;">${ext}</div>
+            <div class="file-info" style="display:flex; flex-direction:column; flex:1; text-align:left;">
+              <div class="file-name" style="font-size:0.8rem; font-weight:500; word-break:break-all;">${name}</div>
+              <div class="file-size" style="font-size:0.65rem; color:var(--text-tertiary); margin-top:2px;">${(decryptedBlob.size / (1024 * 1024)).toFixed(1)} MB · Decrypted</div>
+            </div>
+            <a href="${objectUrl}" download="${name}" class="file-download-btn" style="color:#30D158; font-size:1.2rem; text-decoration:none; margin-left:10px;">⬇️</a>
+          </div>
+        `;
+      }
+      scrollToBottom(bubble.parentElement);
+    }
+  } catch (err) {
+    console.error("Download/decryption failed:", err);
+    if (container) {
+      container.innerHTML = `<span style="font-size:0.75rem; color:#FF3B30;">❌ Decryption Failed</span>`;
+    }
+  }
+}
+
 async function saveChatHistories() {
   const encryptedChats = await encryptData(mockChatHistories);
   const encryptedAIChats = await encryptData(mockAIChatHistories);
@@ -609,97 +715,212 @@ function autoResize(textarea) {
   textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
 }
 
-// File Attachment Handler — processes files locally (zero upload, privacy-first)
-function handleFileAttachment(event) {
+// File Attachment Handler — processes bulk files, encrypts locally (E2EE), and uploads to secure storage
+async function handleFileAttachment(event) {
   const files = Array.from(event.target.files);
   if (!files.length) return;
 
-  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB limit
+  const mySession = JSON.parse(localStorage.getItem('privateai_session') || '{}');
+  const myUid = mySession.uid;
+  const savedProfile = JSON.parse(localStorage.getItem('privateai_profile') || '{}');
+  const senderName = savedProfile.name || (mySession ? mySession.name : 'User');
+
+  const targetChatId = currentActiveChatId;
+  const targetAI = currentActiveAI;
+  if (!targetChatId && !targetAI) return;
+
+  const container = targetAI ? aiContainer : chatContainer;
   const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const container = currentActiveAI ? aiContainer : chatContainer;
 
-  files.forEach(file => {
-    // Enforce size limit
-    if (file.size > MAX_FILE_SIZE) {
-      const notice = document.createElement('div');
-      notice.className = 'date-pill';
-      notice.textContent = `"${file.name}" is over 25 MB. To protect performance, large files aren't supported yet.`;
-      notice.style.maxWidth = '80%';
-      notice.style.textAlign = 'center';
-      container.appendChild(notice);
-      scrollToBottom(container);
-      return; // Skip this file
-    }
-
-    const msgId = 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+  for (const file of files) {
+    const msgId = 'm_file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const ext = file.name.split('.').pop().toUpperCase();
     const isImage = file.type.startsWith('image/');
     const isVideo = file.type.startsWith('video/');
 
-    if (isImage || isVideo) {
-      // Read locally as DataURL — never uploaded anywhere
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const bubble = document.createElement('div');
-        bubble.className = 'message-bubble message-sent attachment-bubble';
-        bubble.id = msgId;
+    // Create the message card immediately in the DOM (with progress bar!)
+    const cardEl = document.createElement('div');
+    cardEl.className = 'message-bubble message-sent attachment-bubble';
+    cardEl.id = msgId;
 
-        if (isImage) {
-          bubble.innerHTML = `
-            <img src="${e.target.result}" class="attachment-image" alt="${file.name}" onclick="openImagePreview(this.src)">
-            <span class="timestamp" style="display:flex;justify-content:flex-end;gap:4px;margin-top:6px;">
-              ${now}
-              <span class="read-receipt sent">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>
-              </span>
-            </span>`;
-        } else {
-          bubble.innerHTML = `
-            <video src="${e.target.result}" class="attachment-image" controls></video>
-            <span class="timestamp" style="display:flex;justify-content:flex-end;gap:4px;margin-top:6px;">
-              ${now}
-              <span class="read-receipt sent">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>
-              </span>
-            </span>`;
-        }
-
-        bubble.addEventListener('contextmenu', (ev) => openContextMenu(ev, msgId));
-        container.appendChild(bubble);
-        scrollToBottom(container);
-      };
-      reader.readAsDataURL(file);
+    let mediaHTML = '';
+    if (isImage) {
+      mediaHTML = `<div class="attachment-blur-placeholder media-placeholder" id="decrypt_${msgId}">📷 ${file.name}</div>`;
+    } else if (isVideo) {
+      mediaHTML = `<div class="attachment-blur-placeholder media-placeholder" id="decrypt_${msgId}">🎥 ${file.name}</div>`;
     } else {
-      // Non-image: show file card
-      const ext = file.name.split('.').pop().toUpperCase();
-      const size = file.size > 1024 * 1024
-        ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
-        : (file.size / 1024).toFixed(0) + ' KB';
-
-      const bubble = document.createElement('div');
-      bubble.className = 'message-bubble message-sent attachment-bubble';
-      bubble.id = msgId;
-      bubble.innerHTML = `
-        <div class="file-card">
-          <div class="file-icon">${ext}</div>
-          <div class="file-info">
-            <div class="file-name">${file.name}</div>
-            <div class="file-size">${size} · Encrypted locally</div>
+      mediaHTML = `
+        <div class="file-card-inner" id="decrypt_${msgId}">
+          <div class="file-icon" style="background:#5E5CE6; padding:6px 10px; border-radius:6px; color:#fff; font-weight:bold; font-size:0.75rem; margin-right:10px;">${ext}</div>
+          <div class="file-info" style="display:flex; flex-direction:column; flex:1; text-align:left;">
+            <div class="file-name" style="font-size:0.8rem; font-weight:500; word-break:break-all;">${file.name}</div>
+            <div class="file-size" style="font-size:0.65rem; color:var(--text-tertiary); margin-top:2px;">${(file.size / (1024 * 1024)).toFixed(1)} MB · Zero-Knowledge E2EE</div>
           </div>
         </div>
-        <span class="timestamp" style="display:flex;justify-content:flex-end;gap:4px;margin-top:6px;">
-          ${now}
-          <span class="read-receipt sent">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>
-          </span>
-        </span>`;
-
-      bubble.addEventListener('contextmenu', (ev) => openContextMenu(ev, msgId));
-      container.appendChild(bubble);
-      scrollToBottom(container);
+      `;
     }
-  });
 
-  // Reset the file input so the same file can be re-selected
+    cardEl.innerHTML = `
+      ${mediaHTML}
+      <div class="upload-progress-container" style="width:100%; margin-top:8px;">
+        <div class="upload-progress-bar" style="width:0%; height:4px; background:#5E5CE6; border-radius:2px; transition:width 0.1s ease;"></div>
+        <div class="upload-progress-text" style="font-size:0.65rem; color:var(--text-tertiary); margin-top:4px; text-align:right;">Encrypting locally...</div>
+      </div>
+      <span class="timestamp" style="display:flex;justify-content:flex-end;gap:4px;margin-top:6px;">
+        ${now}
+        <span class="read-receipt sent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>
+        </span>
+      </span>
+    `;
+
+    container.appendChild(cardEl);
+    scrollToBottom(container);
+
+    try {
+      if (targetAI) {
+        // AI assistant receives the local file directly as data url for offline execution
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          // Put standard content
+          if (isImage) {
+            cardEl.querySelector('.media-placeholder').replaceWith(Object.assign(document.createElement('img'), {
+              src: e.target.result,
+              className: 'attachment-image',
+              onclick: () => openImagePreview(e.target.result)
+            }));
+          } else if (isVideo) {
+            cardEl.querySelector('.media-placeholder').replaceWith(Object.assign(document.createElement('video'), {
+              src: e.target.result,
+              className: 'attachment-image',
+              controls: true
+            }));
+          }
+          cardEl.querySelector('.upload-progress-container').remove();
+          
+          // Save to AI chat history
+          const newMsg = {
+            id: msgId,
+            text: `[File Attachment: ${file.name}]`,
+            sender: 'me',
+            time: now,
+            file: { name: file.name, type: file.type, data: e.target.result }
+          };
+          if (!mockAIChatHistories[targetAI.id]) mockAIChatHistories[targetAI.id] = [];
+          mockAIChatHistories[targetAI.id].push(newMsg);
+          saveChatHistories();
+
+          // Trigger AI response (mock AI)
+          mockE2EEResponse(msgId);
+        };
+        reader.readAsDataURL(file);
+        continue;
+      }
+
+      // E2EE User Chat Flow
+      const sharedSecret = [myUid, targetChatId].sort().join('_');
+      
+      // 1. Read file as ArrayBuffer
+      const arrayBuffer = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+
+      // 2. Encrypt locally (E2EE)
+      const encryptedBuffer = await encryptFile(arrayBuffer, sharedSecret);
+      const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
+
+      // 3. Upload encrypted Blob to Firebase Storage
+      if (db) {
+        const storageRef = firebase.storage().ref().child('chats/' + msgId + '_' + file.name);
+        const uploadTask = storageRef.put(encryptedBlob);
+
+        uploadTask.on('state_changed', 
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            const bar = cardEl.querySelector('.upload-progress-bar');
+            const txt = cardEl.querySelector('.upload-progress-text');
+            if (bar) bar.style.width = progress + '%';
+            if (txt) txt.textContent = `Uploading E2EE payload... ${Math.round(progress)}%`;
+          }, 
+          (error) => {
+            console.error("Upload failed:", error);
+            const txt = cardEl.querySelector('.upload-progress-text');
+            if (txt) txt.textContent = "Upload failed.";
+          }, 
+          async () => {
+            const downloadUrl = await storageRef.getDownloadURL();
+
+            // Remove progress container
+            cardEl.querySelector('.upload-progress-container').remove();
+
+            // Replace placeholder with decrypted media preview locally for instant display!
+            const objectUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: file.type }));
+            if (isImage) {
+              const img = document.createElement('img');
+              img.src = objectUrl;
+              img.className = 'attachment-image';
+              img.onclick = () => openImagePreview(objectUrl);
+              cardEl.querySelector('.media-placeholder').replaceWith(img);
+            } else if (isVideo) {
+              const video = document.createElement('video');
+              video.src = objectUrl;
+              video.className = 'attachment-image';
+              video.controls = true;
+              cardEl.querySelector('.media-placeholder').replaceWith(video);
+            }
+
+            // Create E2EE local history packet
+            const fileMsg = {
+              id: msgId,
+              text: `📂 ${file.name}`,
+              sender: 'me',
+              time: now,
+              status: 'sent',
+              file: {
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                url: downloadUrl,
+                localUrl: objectUrl // Local reference for caching
+              }
+            };
+
+            if (!mockChatHistories[targetChatId]) mockChatHistories[targetChatId] = [];
+            mockChatHistories[targetChatId].push(fileMsg);
+            saveChatHistories();
+
+            // Send E2EE meta packet through the database relay
+            const encryptedPacket = await encryptData({
+              type: 'file',
+              name: file.name,
+              size: file.size,
+              mimeType: file.type,
+              url: downloadUrl,
+              senderHandle: senderName,
+              time: now
+            }, sharedSecret);
+
+            await db.collection('relay').add({
+              to: targetChatId,
+              from: myUid,
+              packet: encryptedPacket,
+              msgId: msgId,
+              timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        );
+      }
+    } catch (err) {
+      console.error("Encryption/Upload failed:", err);
+      const txt = cardEl.querySelector('.upload-progress-text');
+      if (txt) txt.textContent = "Error processing file.";
+    }
+  }
+
+  // Clear file input
   event.target.value = '';
 }
 
@@ -745,8 +966,36 @@ function appendMessageToDOM(msg, container, isPrevSame = false, isNextSame = fal
   const contentDiv = document.createElement('div');
   contentDiv.className = 'message-content';
 
-  // Parse markdown for AI responses, otherwise use raw text
-  if (msg.sender === 'ai' && typeof marked !== 'undefined') {
+  if (msg.file) {
+    const isImg = msg.file.type.startsWith('image/');
+    const isVid = msg.file.type.startsWith('video/');
+    const ext = msg.file.name.split('.').pop().toUpperCase();
+    const partnerId = currentActiveChatId;
+
+    if (isImg || isVid) {
+      contentDiv.innerHTML = `
+        <div class="media-placeholder media-decrypting" id="decrypt_${msg.id}">
+          <div class="spinner" style="margin-bottom:8px;"></div>
+          <span>Decrypting media...</span>
+        </div>
+      `;
+      // Trigger background decryption
+      setTimeout(() => {
+        downloadAndDecryptFile(msg.id, msg.file.url, msg.file.name, msg.file.type, partnerId, true);
+      }, 100);
+    } else {
+      contentDiv.innerHTML = `
+        <div class="file-card-inner recipient-decrypt-card" id="decrypt_${msg.id}">
+          <div class="file-icon" style="background:#5E5CE6; padding:6px 10px; border-radius:6px; color:#fff; font-weight:bold; font-size:0.75rem; margin-right:10px;">${ext}</div>
+          <div class="file-info" style="display:flex; flex-direction:column; flex:1; text-align:left;">
+            <div class="file-name" style="font-size:0.8rem; font-weight:500; word-break:break-all;">${msg.file.name}</div>
+            <div class="file-size" style="font-size:0.65rem; color:var(--text-tertiary); margin-top:2px;">${(msg.file.size / (1024 * 1024)).toFixed(1)} MB · E2EE Encrypted</div>
+          </div>
+          <button class="file-decrypt-btn" onclick="downloadAndDecryptFile('${msg.id}', '${msg.file.url}', '${msg.file.name}', '${msg.file.type}', '${partnerId}')">🔓 Decrypt</button>
+        </div>
+      `;
+    }
+  } else if (msg.sender === 'ai' && typeof marked !== 'undefined') {
     contentDiv.innerHTML = marked.parse(msg.text);
   } else {
     contentDiv.textContent = msg.text;
@@ -1794,11 +2043,20 @@ function startRelayListener() {
             const incomingMsg = {
               id: 'm_relay_' + doc.id,
               originalId: msgId, // Store sender's original message ID
-              text: decrypted.text,
+              text: decrypted.type === 'file' ? `📂 ${decrypted.name}` : decrypted.text,
               sender: 'them',
               time: decrypted.time,
               isReadByMe: currentActiveChatId === from
             };
+
+            if (decrypted.type === 'file') {
+              incomingMsg.file = {
+                name: decrypted.name,
+                size: decrypted.size,
+                type: decrypted.mimeType,
+                url: decrypted.url
+              };
+            }
 
             // Save to local history
             if (!mockChatHistories[from]) mockChatHistories[from] = [];
