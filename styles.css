@@ -2213,3 +2213,272 @@ video.attachment-image {
     padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
   }
 }
+
+/* ---------------------------------------------------
+   SECURE BULK TRANSFER VIEW & RECEIPT CARDS
+--------------------------------------------------- */
+.transfer-view {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(10, 10, 12, 0.98);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  z-index: 2000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  padding: 24px;
+}
+
+.transfer-view.active {
+  display: flex;
+}
+
+.transfer-card {
+  width: 100%;
+  max-width: 440px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 32px 24px;
+  text-align: center;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.transfer-icon-glow {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(94, 92, 230, 0.2) 0%, transparent 70%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5E5CE6;
+  margin-bottom: 20px;
+  border: 1px solid rgba(94, 92, 230, 0.3);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0% { transform: scale(0.96); box-shadow: 0 0 0 0 rgba(94, 92, 230, 0.4); }
+  70% { transform: scale(1.04); box-shadow: 0 0 20px 10px rgba(94, 92, 230, 0); }
+  100% { transform: scale(0.96); box-shadow: 0 0 0 0 rgba(94, 92, 230, 0); }
+}
+
+.transfer-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.transfer-filename {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  margin-bottom: 24px;
+  max-width: 100%;
+}
+
+.transfer-progress-ring {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin-bottom: 24px;
+}
+
+.transfer-progress-ring svg {
+  transform: rotate(-90deg);
+}
+
+.transfer-progress-circle {
+  transition: stroke-dashoffset 0.1s ease;
+}
+
+.transfer-progress-text {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Link-based Transfer Bubble Card styled as a beautiful receipt image */
+.bulk-transfer-card {
+  width: 260px;
+  background: linear-gradient(135deg, rgba(94, 92, 230, 0.15) 0%, rgba(48, 209, 88, 0.05) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bulk-transfer-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -50%;
+  width: 200%; height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.05), transparent);
+  transform: skewX(-25deg);
+  transition: 0.75s;
+}
+
+.bulk-transfer-card:hover::before {
+  left: 120%;
+}
+
+.bulk-transfer-card:hover {
+  transform: translateY(-2px) scale(1.02);
+  border-color: rgba(94, 92, 230, 0.4);
+  box-shadow: 0 8px 24px rgba(94, 92, 230, 0.25);
+}
+
+.bulk-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bulk-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(94, 92, 230, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5E5CE6;
+  font-size: 1.2rem;
+}
+
+.bulk-card-meta {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.bulk-card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.bulk-card-subtitle {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  text-align: left;
+}
+
+.bulk-card-badge {
+  background: rgba(48, 209, 88, 0.2);
+  color: #30D158;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 20px;
+  align-self: flex-start;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bulk-card-action {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #fff;
+  border-radius: 12px;
+  padding: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.bulk-transfer-card:hover .bulk-card-action {
+  background: #5E5CE6;
+  border-color: #5E5CE6;
+}
+
+/* Watch Online / Download View panel styles */
+.transfer-player-container {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transfer-player {
+  width: 100%;
+  max-height: 280px;
+  display: block;
+}
+
+.transfer-preview-image {
+  width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  display: block;
+}
+
+.transfer-action-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 14px;
+  background: #30D158;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.transfer-action-btn:hover {
+  background: #28B047;
+  transform: translateY(-1px);
+}
+
+.transfer-close-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.transfer-close-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}

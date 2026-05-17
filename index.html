@@ -534,6 +534,40 @@
     </div>
   </div>
 
+  <!-- SECURE BULK TRANSFER PANEL (FULLSCREEN PORTAL) -->
+  <div class="transfer-view" id="transfer-view">
+    <div class="transfer-card">
+      <div class="transfer-icon-glow">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+      </div>
+      <h2 class="transfer-title" id="transfer-title">Secure E2EE Upload</h2>
+      <p class="transfer-filename" id="transfer-filename">package_payload.enc</p>
+      
+      <!-- Upload/Download Progress Ring -->
+      <div class="transfer-progress-ring" id="transfer-progress-ring-container">
+        <svg width="120" height="120">
+          <circle cx="60" cy="60" r="50" stroke="rgba(255,255,255,0.05)" stroke-width="8" fill="transparent"></circle>
+          <circle class="transfer-progress-circle" id="transfer-progress-circle" cx="60" cy="60" r="50" stroke="#5E5CE6" stroke-width="8" fill="transparent" stroke-dasharray="314.16" stroke-dashoffset="314.16" stroke-linecap="round"></circle>
+        </svg>
+        <div class="transfer-progress-text" id="transfer-progress-text">0%</div>
+      </div>
+
+      <!-- Preview Player Container (hidden by default) -->
+      <div class="transfer-player-container" id="transfer-player-container" style="display: none;">
+        <!-- Dynamic Player or image injected here -->
+      </div>
+
+      <button class="transfer-action-btn" id="transfer-action-btn" style="display: none;">
+        <span>⬇️ Download Decrypted File</span>
+      </button>
+      <button class="transfer-close-btn" id="transfer-close-btn" onclick="closeTransferView()">
+        <span>Cancel</span>
+      </button>
+    </div>
+  </div>
+
   <!-- BOTTOM NAVIGATION BAR -->
   <nav class="bottom-nav" id="bottom-nav">
     <button class="bottom-nav-btn active" id="bnav-chats" onclick="switchMainView('chats')">

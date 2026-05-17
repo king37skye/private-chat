@@ -352,72 +352,276 @@ async function decryptFile(arrayBuffer, customKeyMaterial) {
   }
 }
 
-async function downloadAndDecryptFile(msgId, url, name, type, partnerId, isAutoMedia = false) {
-  const container = document.getElementById(`decrypt_${msgId}`);
-  if (!isAutoMedia && container) {
-    container.innerHTML = `
-      <div class="spinner" style="margin-right:8px;"></div>
-      <span style="font-size:0.75rem;">Decrypting locally...</span>
-    `;
+}
+
+// Dynamic Circular Progress Ring updates
+function updateTransferCircleProgress(percentage, textStatus = "Processing...") {
+  const circle = document.getElementById('transfer-progress-circle');
+  const txt = document.getElementById('transfer-progress-text');
+  const title = document.getElementById('transfer-title');
+  if (circle) {
+    const dashoffset = 314.16 - (percentage / 100) * 314.16;
+    circle.style.strokeDashoffset = dashoffset;
   }
+  if (txt) {
+    txt.textContent = Math.round(percentage) + '%';
+  }
+  if (title) {
+    title.textContent = textStatus;
+  }
+}
 
-  try {
-    const mySession = JSON.parse(localStorage.getItem('privateai_session') || '{}');
-    const myUid = mySession.uid;
-    const sharedSecret = [myUid, partnerId].sort().join('_');
+// Close Secure Transfer Portal
+function closeTransferView() {
+  const portal = document.getElementById('transfer-view');
+  if (portal) portal.classList.remove('active');
+  const container = document.getElementById('transfer-player-container');
+  if (container) {
+    container.innerHTML = '';
+    container.style.display = 'none';
+  }
+  const downloadBtn = document.getElementById('transfer-action-btn');
+  if (downloadBtn) {
+    downloadBtn.style.display = 'none';
+    downloadBtn.onclick = null;
+  }
+}
 
-    // 1. Download encrypted array buffer
-    const response = await fetch(url);
-    const encryptedBuffer = await response.arrayBuffer();
+// Main Secure Transfer Portal Controller — handles dynamic uploading & offline watch online E2EE player!
+async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = null, partnerId = null) {
+  const portal = document.getElementById('transfer-view');
+  const title = document.getElementById('transfer-title');
+  const filename = document.getElementById('transfer-filename');
+  const progressRing = document.getElementById('transfer-progress-ring-container');
+  const playerContainer = document.getElementById('transfer-player-container');
+  const downloadBtn = document.getElementById('transfer-action-btn');
+  const closeBtn = document.getElementById('transfer-close-btn');
 
-    // 2. Decrypt locally using E2EE shared secret
-    const decryptedBuffer = await decryptFile(encryptedBuffer, sharedSecret);
-    if (!decryptedBuffer) throw new Error("Decryption failed");
+  // Reset standard states
+  portal.classList.add('active');
+  progressRing.style.display = 'block';
+  playerContainer.style.display = 'none';
+  playerContainer.innerHTML = '';
+  downloadBtn.style.display = 'none';
+  closeBtn.textContent = 'Cancel';
 
-    // 3. Create object URL for local blob
-    const decryptedBlob = new Blob([decryptedBuffer], { type: type });
-    const objectUrl = URL.createObjectURL(decryptedBlob);
+  const mySession = JSON.parse(localStorage.getItem('privateai_session') || '{}');
+  const myUid = mySession.uid;
+  const savedProfile = JSON.parse(localStorage.getItem('privateai_profile') || '{}');
+  const senderName = savedProfile.name || (mySession ? mySession.name : 'User');
 
-    // Save to local cache in history so it doesn't need to be decrypted again!
+  if (isUpload) {
+    // ----------------------------------------------------
+    // UPLOAD FLOW (Local Encrypt -> Firebase Storage)
+    // ----------------------------------------------------
+    const file = msgIdOrFile; // passed in as the file object
+    filename.textContent = file.name;
+    updateTransferCircleProgress(0, "Encrypting locally...");
+
+    try {
+      const targetChatId = currentActiveChatId;
+      const sharedSecret = [myUid, targetChatId].sort().join('_');
+      const msgId = 'm_bulk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // 1. Read file locally
+      const arrayBuffer = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+
+      // 2. Encrypt locally (AES-GCM E2EE)
+      updateTransferCircleProgress(20, "Securing payload...");
+      const encryptedBuffer = await encryptFile(arrayBuffer, sharedSecret);
+      const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
+
+      // 3. Upload encrypted Blob to Firebase Storage
+      if (db) {
+        const storageRef = firebase.storage().ref().child('chats/' + msgId + '_' + file.name);
+        const uploadTask = storageRef.put(encryptedBlob);
+
+        uploadTask.on('state_changed',
+          (snapshot) => {
+            const progress = 20 + ((snapshot.bytesTransferred / snapshot.totalBytes) * 80);
+            updateTransferCircleProgress(progress, "Uploading securely...");
+          },
+          (error) => {
+            console.error("Bulk upload failed:", error);
+            updateTransferCircleProgress(0, "Upload Failed");
+          },
+          async () => {
+            const downloadUrl = await storageRef.getDownloadURL();
+            updateTransferCircleProgress(100, "Secure Link Active!");
+
+            const objectUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: file.type }));
+
+            // Save to chat history as a Bulky E2EE file
+            const fileMsg = {
+              id: msgId,
+              text: `📂 Bulk Transfer: ${file.name}`,
+              sender: 'me',
+              time: now,
+              status: 'sent',
+              file: {
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                url: downloadUrl,
+                localUrl: objectUrl,
+                isBulky: true
+              }
+            };
+
+            if (!mockChatHistories[targetChatId]) mockChatHistories[targetChatId] = [];
+            mockChatHistories[targetChatId].push(fileMsg);
+            saveChatHistories();
+
+            // Append to DOM immediately for sender
+            appendMessageToDOM(fileMsg, chatContainer);
+            scrollToBottom(chatContainer);
+
+            // Send E2EE meta packet through the database relay
+            const encryptedPacket = await encryptData({
+              type: 'file',
+              name: file.name,
+              size: file.size,
+              mimeType: file.type,
+              url: downloadUrl,
+              senderHandle: senderName,
+              time: now,
+              isBulky: true
+            }, sharedSecret);
+
+            await db.collection('relay').add({
+              to: targetChatId,
+              from: myUid,
+              packet: encryptedPacket,
+              msgId: msgId,
+              timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            // Automatically close portal on success
+            setTimeout(closeTransferView, 1000);
+          }
+        );
+      }
+    } catch (err) {
+      console.error("Bulk encryption failed:", err);
+      updateTransferCircleProgress(0, "Error Encrypting");
+    }
+  } else {
+    // ----------------------------------------------------
+    // DOWNLOAD / PREVIEW / DECRYPT FLOW
+    // ----------------------------------------------------
+    const msgId = msgIdOrFile;
     const history = mockChatHistories[partnerId];
-    if (history) {
-      const msg = history.find(m => m.id === msgId);
-      if (msg && msg.file) {
+    if (!history) {
+      closeTransferView();
+      return;
+    }
+    const msg = history.find(m => m.id === msgId);
+    if (!msg || !msg.file) {
+      closeTransferView();
+      return;
+    }
+
+    filename.textContent = msg.file.name;
+    updateTransferCircleProgress(0, "Connecting securely...");
+
+    try {
+      const sharedSecret = [myUid, partnerId].sort().join('_');
+      let objectUrl = msg.file.localUrl;
+
+      // 1. If not cached, download and decrypt
+      if (!objectUrl) {
+        updateTransferCircleProgress(10, "Fetching secure payload...");
+
+        // Progressive stream download for accuracy!
+        const response = await fetch(msg.file.url);
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        let loaded = 0;
+
+        const reader = response.body.getReader();
+        const chunks = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          loaded += value.length;
+
+          if (total > 0) {
+            const downloadProgress = (loaded / total) * 90; // Up to 90%
+            updateTransferCircleProgress(downloadProgress, "Downloading E2EE stream...");
+          }
+        }
+
+        // Merge binary chunks
+        const allChunks = new Uint8Array(loaded);
+        let position = 0;
+        for (const chunk of chunks) {
+          allChunks.set(chunk, position);
+          position += chunk.length;
+        }
+
+        updateTransferCircleProgress(90, "Decrypting securely...");
+        const decryptedBuffer = await decryptFile(allChunks.buffer, sharedSecret);
+        if (!decryptedBuffer) throw new Error("Decryption failed");
+
+        const decryptedBlob = new Blob([decryptedBuffer], { type: msg.file.type });
+        objectUrl = URL.createObjectURL(decryptedBlob);
+
+        // Cache the decrypted local blob URL in history
         msg.file.localUrl = objectUrl;
         saveChatHistories();
       }
-    }
 
-    // 4. Update the DOM
-    const bubble = document.getElementById(msgId);
-    if (bubble) {
-      const contentDiv = bubble.querySelector('.message-content');
-      const isImg = type.startsWith('image/');
-      const isVid = type.startsWith('video/');
-      const ext = name.split('.').pop().toUpperCase();
+      // 2. Hide circular progress loader
+      progressRing.style.display = 'none';
+      playerContainer.style.display = 'flex';
+      title.textContent = "Secure E2EE Portal";
 
-      if (isImg) {
-        contentDiv.innerHTML = `<img src="${objectUrl}" class="attachment-image" onclick="openImagePreview('${objectUrl}')">`;
-      } else if (isVid) {
-        contentDiv.innerHTML = `<video src="${objectUrl}" class="attachment-image" controls></video>`;
+      // 3. Render watch online or download preview
+      const isImg = msg.file.type.startsWith('image/');
+      const isVid = msg.file.type.startsWith('video/');
+
+      if (isVid) {
+        // Watch Online Custom Player!
+        playerContainer.innerHTML = `
+          <video src="${objectUrl}" controls class="transfer-player" autoplay></video>
+        `;
+      } else if (isImg) {
+        playerContainer.innerHTML = `
+          <img src="${objectUrl}" class="transfer-preview-image" alt="${msg.file.name}">
+        `;
       } else {
-        contentDiv.innerHTML = `
-          <div class="file-card-inner">
-            <div class="file-icon" style="background:#30D158; padding:6px 10px; border-radius:6px; color:#fff; font-weight:bold; font-size:0.75rem; margin-right:10px;">${ext}</div>
-            <div class="file-info" style="display:flex; flex-direction:column; flex:1; text-align:left;">
-              <div class="file-name" style="font-size:0.8rem; font-weight:500; word-break:break-all;">${name}</div>
-              <div class="file-size" style="font-size:0.65rem; color:var(--text-tertiary); margin-top:2px;">${(decryptedBlob.size / (1024 * 1024)).toFixed(1)} MB · Decrypted</div>
-            </div>
-            <a href="${objectUrl}" download="${name}" class="file-download-btn" style="color:#30D158; font-size:1.2rem; text-decoration:none; margin-left:10px;">⬇️</a>
+        // Doc / General file badge
+        const ext = msg.file.name.split('.').pop().toUpperCase();
+        playerContainer.innerHTML = `
+          <div style="padding:40px; text-align:center; color:#fff;">
+            <div style="font-size:3rem; margin-bottom:12px;">📁</div>
+            <div style="font-size:1.1rem; font-weight:600;">${msg.file.name}</div>
+            <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:4px;">${ext} Document · E2EE Encrypted</div>
           </div>
         `;
       }
-      scrollToBottom(bubble.parentElement);
-    }
-  } catch (err) {
-    console.error("Download/decryption failed:", err);
-    if (container) {
-      container.innerHTML = `<span style="font-size:0.75rem; color:#FF3B30;">❌ Decryption Failed</span>`;
+
+      // 4. Setup Download button & Close panel actions
+      downloadBtn.style.display = 'flex';
+      downloadBtn.onclick = () => {
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = msg.file.name;
+        a.click();
+      };
+
+      closeBtn.textContent = 'Close Transfer Panel';
+
+    } catch (err) {
+      console.error("Secure transfer load failed:", err);
+      updateTransferCircleProgress(0, "❌ Failed Decrypting");
     }
   }
 }
@@ -731,8 +935,16 @@ async function handleFileAttachment(event) {
 
   const container = targetAI ? aiContainer : chatContainer;
   const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const BULKY_THRESHOLD = 5 * 1024 * 1024; // 5 MB threshold for bulky files
 
   for (const file of files) {
+    // 1. Check if the file is bulky (over 5MB)
+    if (file.size > BULKY_THRESHOLD && !targetAI) {
+      // Bulky file! Redirect/open our dedicated Secure Transfer Portal!
+      openTransferView(file, true);
+      continue;
+    }
+
     const msgId = 'm_file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     const ext = file.name.split('.').pop().toUpperCase();
     const isImage = file.type.startsWith('image/');
@@ -970,9 +1182,24 @@ function appendMessageToDOM(msg, container, isPrevSame = false, isNextSame = fal
     const isImg = msg.file.type.startsWith('image/');
     const isVid = msg.file.type.startsWith('video/');
     const ext = msg.file.name.split('.').pop().toUpperCase();
-    const partnerId = currentActiveChatId;
+    const partnerId = currentActiveChatId || container.id.split('_').pop();
 
-    if (isImg || isVid) {
+    if (msg.file.isBulky) {
+      const icon = isImg ? '📷' : (isVid ? '🎥' : '📁');
+      contentDiv.innerHTML = `
+        <div class="bulk-transfer-card" onclick="openTransferView('${msg.id}', false, null, '${partnerId}')">
+          <div class="bulk-card-header">
+            <div class="bulk-card-icon">${icon}</div>
+            <div class="bulk-card-meta">
+              <span class="bulk-card-title">${msg.file.name}</span>
+              <span class="bulk-card-subtitle">${(msg.file.size / (1024 * 1024)).toFixed(1)} MB · E2EE Link</span>
+            </div>
+          </div>
+          <div class="bulk-card-badge">🔐 Bulk Secure Link</div>
+          <button class="bulk-card-action">🔓 View Secure Transfer</button>
+        </div>
+      `;
+    } else if (isImg || isVid) {
       contentDiv.innerHTML = `
         <div class="media-placeholder media-decrypting" id="decrypt_${msg.id}">
           <div class="spinner" style="margin-bottom:8px;"></div>
@@ -2054,7 +2281,8 @@ function startRelayListener() {
                 name: decrypted.name,
                 size: decrypted.size,
                 type: decrypted.mimeType,
-                url: decrypted.url
+                url: decrypted.url,
+                isBulky: decrypted.isBulky || false
               };
             }
 
