@@ -462,7 +462,16 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
       // 3. Upload encrypted Blob to Firebase Storage
       if (db) {
         const storageRef = firebase.storage().ref().child('chats/' + msgId + '_' + file.name);
-        const uploadTask = storageRef.put(encryptedBlob);
+        const metadata = { contentType: file.type || 'application/octet-stream' };
+        const uploadTask = storageRef.put(encryptedBlob, metadata);
+
+        // Stuck detector: alert user if Firebase Storage CORS/preflight is blocked under file:///
+        const stuckTimer = setTimeout(() => {
+          const title = document.getElementById('transfer-title');
+          if (title && title.textContent === "Uploading securely...") {
+            title.textContent = "Negotiating secure link (stuck? check CORS/Storage Rules)...";
+          }
+        }, 6000);
 
         uploadTask.on('state_changed',
           (snapshot) => {
@@ -470,10 +479,12 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
             updateTransferCircleProgress(progress, "Uploading securely...");
           },
           (error) => {
+            clearTimeout(stuckTimer);
             console.error("Bulk upload failed:", error);
-            updateTransferCircleProgress(0, "Upload Failed");
+            updateTransferCircleProgress(0, `Upload Error: ${error.code || error.message || 'Access Blocked'}`);
           },
           async () => {
+            clearTimeout(stuckTimer);
             const downloadUrl = await storageRef.getDownloadURL();
             updateTransferCircleProgress(100, "Secure Link Active!");
 
@@ -1074,7 +1085,8 @@ async function handleFileAttachment(event) {
       // 3. Upload encrypted Blob to Firebase Storage
       if (db) {
         const storageRef = firebase.storage().ref().child('chats/' + msgId + '_' + file.name);
-        const uploadTask = storageRef.put(encryptedBlob);
+        const metadata = { contentType: file.type || 'application/octet-stream' };
+        const uploadTask = storageRef.put(encryptedBlob, metadata);
 
         uploadTask.on('state_changed', 
           (snapshot) => {
@@ -1087,7 +1099,7 @@ async function handleFileAttachment(event) {
           (error) => {
             console.error("Upload failed:", error);
             const txt = cardEl.querySelector('.upload-progress-text');
-            if (txt) txt.textContent = "Upload failed.";
+            if (txt) txt.textContent = `Upload failed: ${error.code || error.message || 'Error'}`;
           }, 
           async () => {
             const downloadUrl = await storageRef.getDownloadURL();
