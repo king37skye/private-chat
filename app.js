@@ -1,3 +1,67 @@
+// Global Debug/Error Display Banner for Troubleshooting CORS / Firebase rules
+window.addEventListener('error', (event) => {
+  showDebugError(`Error: ${event.message} at ${event.filename}:${event.lineno}`);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  showDebugError(`Unhandled Rejection: ${event.reason}`);
+});
+
+// Intercept console.error to show Firebase/CORS errors immediately in the UI!
+const originalConsoleError = console.error;
+console.error = function(...args) {
+  originalConsoleError.apply(console, args);
+  const errMsg = args.map(arg => {
+    if (arg instanceof Error) return arg.message;
+    if (typeof arg === 'object') {
+      try { return JSON.stringify(arg); } catch(e) { return String(arg); }
+    }
+    return String(arg);
+  }).join(' ');
+  
+  if (errMsg.includes('Firebase') || errMsg.includes('upload') || errMsg.includes('storage') || errMsg.includes('CORS') || errMsg.includes('failed') || errMsg.includes('Error')) {
+    showDebugError(errMsg);
+  }
+};
+
+function showDebugError(message) {
+  let banner = document.getElementById('debug-error-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'debug-error-banner';
+    banner.style.position = 'fixed';
+    banner.style.top = '16px';
+    banner.style.left = '50%';
+    banner.style.transform = 'translateX(-50%)';
+    banner.style.background = 'rgba(255, 59, 48, 0.95)';
+    banner.style.color = '#fff';
+    banner.style.padding = '12px 20px';
+    banner.style.borderRadius = '12px';
+    banner.style.fontSize = '0.85rem';
+    banner.style.fontWeight = '500';
+    banner.style.zIndex = '999999';
+    banner.style.boxShadow = '0 8px 32px rgba(0,0,0,0.5)';
+    banner.style.backdropFilter = 'blur(10px)';
+    banner.style.border = '1px solid rgba(255,255,255,0.2)';
+    banner.style.textAlign = 'center';
+    banner.style.maxWidth = '90%';
+    banner.style.wordBreak = 'break-word';
+    banner.innerHTML = `
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span>⚠️</span>
+        <span id="debug-error-text" style="flex:1;"></span>
+        <button onclick="this.parentElement.parentElement.remove()" style="background:none; border:none; color:#fff; font-weight:bold; cursor:pointer; font-size:1.1rem; padding:0 4px;">×</button>
+      </div>
+    `;
+    document.body.appendChild(banner);
+  }
+  document.getElementById('debug-error-text').textContent = message;
+  
+  // Auto-dismiss after 15 seconds
+  setTimeout(() => {
+    if (banner && banner.parentElement) banner.remove();
+  }, 15000);
+}
+
 // Firebase Configuration (Public Relay for Testing)
 const firebaseConfig = {
   apiKey: "AIzaSyBkaE1Zk4XQ4m8a6NzjGFadnA1oSwNkbvo",
