@@ -1641,6 +1641,11 @@ async function sendMessage() {
     history.push(newMsg);
     saveChatHistories();
 
+    // Show AI typing indicator
+    aiContainer.appendChild(typingIndicator);
+    typingIndicator.classList.add('active');
+    scrollToBottom(aiContainer);
+
     // Fetch link preview if URL found
     if (detectedUrl) fetchLinkPreview(detectedUrl, newMsg.id, aiContainer);
 
@@ -1787,7 +1792,9 @@ function mockE2EEResponse(sentMsgId) {
     }
 
     typingIndicator.classList.remove('active');
-    chatContainer.removeChild(typingIndicator);
+    if (chatContainer.contains(typingIndicator)) {
+      chatContainer.removeChild(typingIndicator);
+    }
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const responseMsg = { id: 'm_' + Date.now(), text: "Encrypted and received. I'm reviewing it now.", sender: 'them', time: now };
     appendMessageToDOM(responseMsg, chatContainer);
@@ -1995,17 +2002,33 @@ function shareWithAI() {
 
 // Real AI Processing via Secure Backend
 async function processAIQuery(prompt, aiId) {
-  // Keeping the UI alive with a mock response for now
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve("The AI Assistant is currently in 'Offline Mode' while we finalize the cloud secure-bridge. I'll be fully active soon! How else can I help you visually test the space?");
-    }, 1500);
-  }).then(text => deliverAIResponse(text, "Secure Backend"));
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ prompt })
+    });
+
+    if (!response.ok) {
+      const errorJson = await response.json();
+      throw new Error(errorJson.error || 'Server returned an error');
+    }
+
+    const data = await response.json();
+    deliverAIResponse(data.text, "Secure Cloud");
+  } catch (err) {
+    console.error("AI secure-bridge failed, using local offline fallback:", err);
+    deliverAIResponse("I'm sorry, my secure Vercel cloud bridge encountered an error. Please make sure GEMINI_API_KEY is configured in your Vercel project environment settings. Error details: " + err.message, "Offline Fallback");
+  }
 }
 
 function deliverAIResponse(text, badge) {
   typingIndicator.classList.remove('active');
-  aiContainer.removeChild(typingIndicator);
+  if (aiContainer.contains(typingIndicator)) {
+    aiContainer.removeChild(typingIndicator);
+  }
 
   const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const newMsg = { id: 'm_' + Date.now(), text, sender: 'ai', time: `${badge} • ${now}` };
