@@ -665,7 +665,14 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
           // FIRESTORE CHUNK RELAY DOWNLOAD FLOW (CORS-free, WebSocket speed!)
           updateTransferCircleProgress(10, "Establishing E2EE secure tunnel...");
           
-          const metaDoc = await db.collection('transfers').doc(msgId).get();
+          let realTransferId = msgId;
+          if (msg.file && msg.file.url && msg.file.url.startsWith('firestore_chunked://')) {
+            realTransferId = msg.file.url.split('firestore_chunked://')[1];
+          } else if (msg.originalId) {
+            realTransferId = msg.originalId;
+          }
+          
+          const metaDoc = await db.collection('transfers').doc(realTransferId).get();
           if (!metaDoc.exists) throw new Error("Secure transfer metadata not found");
           
           const meta = metaDoc.data();
@@ -673,7 +680,7 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
           const chunks = [];
           
           for (let i = 0; i < numChunks; i++) {
-            const chunkDoc = await db.collection('transfers').doc(msgId).collection('chunks').doc(String(i)).get();
+            const chunkDoc = await db.collection('transfers').doc(realTransferId).collection('chunks').doc(String(i)).get();
             if (!chunkDoc.exists) throw new Error(`Missing secure E2EE chunk ${i}`);
             
             const firestoreBlob = chunkDoc.data().data;
