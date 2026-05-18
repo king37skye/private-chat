@@ -2594,7 +2594,7 @@ function startRelayListener() {
             saveChatHistories();
 
             // Send back E2EE delivery/read receipt immediately
-            if (db) {
+            if (db && msgId) {
               db.collection('relay').add({
                 to: from, // Send back to original sender
                 from: myUid,
@@ -2602,7 +2602,7 @@ function startRelayListener() {
                 msgId: msgId,
                 status: currentActiveChatId === from ? 'read' : 'delivered',
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
-              });
+              }).catch(err => console.error("Failed sending E2EE receipt:", err));
             }
           }
 
