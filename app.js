@@ -794,7 +794,7 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
 
 // Standalone Firestore E2EE Chunk Upload Helper (CORS-free Self-Healing Fallback)
 async function performFirestoreChunkUpload(msgId, encryptedBuffer, fileName, fileType, originalArrayBuffer, senderName, targetChatId, now) {
-  const CHUNK_SIZE = 800 * 1024; // 800 KB chunks (guaranteed under 1MB Firestore limit)
+  const CHUNK_SIZE = 950 * 1024; // 950 KB chunks (optimized to reduce total writes and stay safely under 1MB limit)
   const totalBytes = encryptedBuffer.byteLength;
   const numChunks = Math.ceil(totalBytes / CHUNK_SIZE);
   
@@ -824,6 +824,10 @@ async function performFirestoreChunkUpload(msgId, encryptedBuffer, fileName, fil
       index: i,
       data: firestoreBlob
     });
+    
+    // Throttle writes slightly (150ms) to allow Firestore background WebSocket/HTTP2 streams
+    // to flush outstanding transactions, completely preventing resource-exhausted write queue blocks!
+    await new Promise(resolve => setTimeout(resolve, 150));
     
     // Scale chunk progress from 25% to 95%
     const progress = 25 + (((i + 1) / numChunks) * 70);
