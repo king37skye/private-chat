@@ -405,30 +405,32 @@
   --bg-primary: #000000;
   
   /* Elevated Surfaces: Dark Charcoal */
-  --bg-elevated: #1C1C1E;
+  --bg-elevated: #161618;
   
-  /* Primary Accent: Electric Indigo */
+  /* Primary Accent: Gradient Electric Indigo */
   --accent-primary: #5E5CE6;
+  --accent-gradient: linear-gradient(135deg, #6C5CE7 0%, #8E2DE2 100%);
   
   /* AI Accent: Cyan-Blue Gradient */
   --accent-ai-start: #32ADE6;
   --accent-ai-end: #007AFF;
+  --accent-ai-gradient: linear-gradient(135deg, #32ADE6 0%, #007AFF 100%);
   
   /* Error/Warning */
   --color-error: #FF3B30;
   
   /* Success */
-  --color-success: #34C759;
+  --color-success: #30D158;
 
   /* Typography Colors */
   --text-primary: #FFFFFF;
-  --text-secondary: rgba(255, 255, 255, 0.6);
-  --text-tertiary: rgba(255, 255, 255, 0.3);
+  --text-secondary: rgba(255, 255, 255, 0.65);
+  --text-tertiary: rgba(255, 255, 255, 0.35);
 
   /* Glassmorphism Blur Material (Dark) */
-  --glass-bg: rgba(28, 28, 30, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-blur: blur(20px);
+  --glass-bg: rgba(20, 20, 25, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(25px);
 }
 
 /* Base Reset & Typography */
@@ -441,7 +443,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   height: 100dvh; /* Mobile optimization */
@@ -449,6 +451,43 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+/* Ambient Neon Glows for Deep Premium Visuals */
+body::before, body::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.16;
+  pointer-events: none;
+  z-index: 0;
+}
+body::before {
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, #5E5CE6 0%, transparent 80%);
+  top: -60px;
+  left: -60px;
+  animation: floatGlow1 24s infinite alternate ease-in-out;
+}
+body::after {
+  width: 280px;
+  height: 280px;
+  background: radial-gradient(circle, #007AFF 0%, transparent 80%);
+  bottom: 80px;
+  right: -60px;
+  animation: floatGlow2 24s infinite alternate ease-in-out;
+}
+
+@keyframes floatGlow1 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(50px, 80px) scale(1.1); }
+}
+@keyframes floatGlow2 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-80px, -50px) scale(1.15); }
 }
 
 /* Typography Utilities */
@@ -2201,16 +2240,50 @@ video.attachment-image {
   scroll-behavior: auto; /* Let JS control smooth vs instant scroll explicitly */
 }
 
-/* Mobile Active Chat Layout Optimization */
+/* Mobile Optimization & Floating Bottom Nav Bar */
 @media (max-width: 767px) {
+  #app-container {
+    padding-bottom: 96px !important;
+  }
+  
+  .bottom-nav {
+    left: 20px !important;
+    right: 20px !important;
+    bottom: 20px !important;
+    height: 64px !important;
+    border-radius: 32px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: rgba(20, 20, 25, 0.72) !important;
+    backdrop-filter: blur(28px) !important;
+    -webkit-backdrop-filter: blur(28px) !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 1px 1px rgba(255, 255, 255, 0.05) !important;
+    padding-bottom: 0 !important;
+    width: auto !important;
+    transition: transform 0.3s ease, opacity 0.3s ease !important;
+  }
+  
   #app-container.app-state-chat {
     padding-bottom: 0 !important;
   }
+  
   #app-container.app-state-chat .bottom-nav {
-    display: none !important;
+    transform: translateY(120px) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
+  
   #app-container.app-state-chat .input-area {
     padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .contacts-list, .discover-list, #profile-view {
+    padding-bottom: 110px !important;
+  }
+  
+  #contacts-view, #discover-view, #profile-view, .chat-view-panel {
+    background: rgba(0, 0, 0, 0.35) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
   }
 }
 
@@ -2221,9 +2294,9 @@ video.attachment-image {
   display: none;
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(10, 10, 12, 0.98);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
+  background: radial-gradient(circle at center, rgba(10, 10, 14, 0.88) 0%, rgba(3, 3, 5, 0.96) 100%);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
   z-index: 2000;
   flex-direction: column;
   align-items: center;
@@ -2238,29 +2311,38 @@ video.attachment-image {
 
 .transfer-card {
   width: 100%;
-  max-width: 440px;
+  max-width: 400px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  padding: 32px 24px;
+  border-radius: 28px;
+  padding: 36px 28px;
   text-align: center;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
   align-items: center;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: cardFadePop 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes cardFadePop {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 .transfer-icon-glow {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(94, 92, 230, 0.2) 0%, transparent 70%);
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(94, 92, 230, 0.2) 0%, rgba(50, 173, 230, 0.2) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #5E5CE6;
-  margin-bottom: 20px;
-  border: 1px solid rgba(94, 92, 230, 0.3);
+  margin-bottom: 24px;
+  border: 1px solid rgba(94, 92, 230, 0.4);
+  box-shadow: 0 8px 30px rgba(94, 92, 230, 0.3);
   animation: pulse-glow 2s infinite ease-in-out;
 }
 
@@ -2280,32 +2362,38 @@ video.attachment-image {
   font-size: 0.95rem;
   color: var(--text-secondary);
   word-break: break-all;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
   max-width: 100%;
 }
 
 .transfer-progress-ring {
   position: relative;
-  width: 120px;
-  height: 120px;
+  width: 130px;
+  height: 130px;
   margin-bottom: 24px;
 }
 
 .transfer-progress-ring svg {
   transform: rotate(-90deg);
+  width: 130px;
+  height: 130px;
 }
 
 .transfer-progress-circle {
   transition: stroke-dashoffset 0.1s ease;
+  stroke: #5E5CE6;
+  filter: drop-shadow(0 0 8px rgba(94, 92, 230, 0.6));
 }
 
 .transfer-progress-text {
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.3rem;
+  font-weight: 800;
   color: #fff;
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
 /* Link-based Transfer Bubble Card styled as a beautiful receipt image */
