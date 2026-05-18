@@ -19,6 +19,16 @@
      AUTH SCREEN OVERLAY
      ============================================= -->
 <body>
+<script>
+  (function() {
+    if (localStorage.getItem('privateai_session')) {
+      var style = document.createElement('style');
+      style.id = 'optimistic-auth-style';
+      style.innerHTML = '#auth-screen { display: none !important; } #app-container.app-locked { display: flex !important; }';
+      document.head.appendChild(style);
+    }
+  })();
+</script>
 <div id="auth-screen">
   <div class="auth-glow auth-glow-1"></div>
   <div class="auth-glow auth-glow-2"></div>

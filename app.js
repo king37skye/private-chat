@@ -109,6 +109,10 @@ function checkAuthSession() {
     } else {
       // User is signed out
       localStorage.removeItem('privateai_session');
+      
+      const optimisticStyle = document.getElementById('optimistic-auth-style');
+      if (optimisticStyle) optimisticStyle.remove();
+
       document.getElementById('app-container').classList.add('app-locked');
       document.getElementById('auth-screen').style.display = 'flex';
       document.getElementById('auth-screen').classList.remove('fade-out');
@@ -121,6 +125,9 @@ function unlockApp(animate = true) {
   const authScreen = document.getElementById('auth-screen');
   const appContainer = document.getElementById('app-container');
   appContainer.classList.remove('app-locked');
+
+  const optimisticStyle = document.getElementById('optimistic-auth-style');
+  if (optimisticStyle) optimisticStyle.remove();
 
   if (animate) {
     authScreen.classList.add('fade-out');
