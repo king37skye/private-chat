@@ -2828,11 +2828,19 @@ function startRelayListener() {
           }
 
           // Otherwise it is a normal message
+          const msgIdToCheck = decrypted.msgId || legacyMsgId;
+          const history = mockChatHistories[from];
+          if (history && history.some(m => m.id === msgIdToCheck || m.originalId === msgIdToCheck)) {
+            // Already exists in local history, skip to avoid double rendering
+            doc.ref.delete();
+            continue;
+          }
+
           const incomingMsg = {
             id: 'm_relay_' + doc.id,
-            originalId: decrypted.msgId || legacyMsgId,
+            originalId: msgIdToCheck,
             text: decrypted.type === 'file' ? `📂 ${decrypted.name}` : decrypted.text,
-            sender: 'them',
+            sender: from === myUid ? 'me' : 'them',
             time: decrypted.time,
             isReadByMe: currentActiveChatId === from
           };
