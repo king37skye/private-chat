@@ -402,7 +402,7 @@ async function decryptData(encryptedString, customKeyMaterial) {
     const decoder = new TextDecoder();
     return JSON.parse(decoder.decode(decrypted));
   } catch (e) {
-    console.error("Decryption failed:", e);
+    // Silently fail if it's old legacy plaintext data or wrong key
     return null;
   }
 }
