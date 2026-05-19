@@ -93,7 +93,7 @@ let pendingPhone = '';
 
 // Called on page load — check if session exists
 function checkAuthSession() {
-  firebase.auth().onAuthStateChanged((user) => {
+  firebase.auth().onAuthStateChanged(async (user) => {
     if (user) {
       // User is signed in
       const userData = {
