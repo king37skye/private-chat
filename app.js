@@ -2693,7 +2693,6 @@ function startRelayListener() {
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
               }).catch(err => console.error("Failed sending E2EE receipt:", err));
             }
-          }
 
           // Delete from cloud immediately after processing (Privacy-First)
           doc.ref.delete();
