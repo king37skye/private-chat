@@ -147,14 +147,15 @@ function unlockApp(animate = true) {
 }
 
 async function initSecureStorage() {
-  const encProfile = localStorage.getItem('privateai_profile');
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+  const encProfile = localStorage.getItem('privateai_profile_' + myUid);
   if (encProfile) {
     try { window.myProfileData = await decryptData(encProfile); } catch(e) { window.myProfileData = {}; }
   } else {
     window.myProfileData = {};
   }
 
-  const encFollowing = localStorage.getItem('privateai_following');
+  const encFollowing = localStorage.getItem('privateai_following_' + myUid);
   if (encFollowing) {
     try {
       const arr = await decryptData(encFollowing);
@@ -356,7 +357,10 @@ let mockAIChatHistories = {
 // =====================================================
 
 async function initECDHKeys() {
-  if (localStorage.getItem('privateai_ecdh_public') && localStorage.getItem('privateai_ecdh_private')) return;
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+  const pubKeyName = 'privateai_ecdh_public_' + myUid;
+  const privKeyName = 'privateai_ecdh_private_' + myUid;
+  if (localStorage.getItem(pubKeyName) && localStorage.getItem(privKeyName)) return;
   
   const keyPair = await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
@@ -367,14 +371,15 @@ async function initECDHKeys() {
   const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
   const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
   
-  localStorage.setItem('privateai_ecdh_public', JSON.stringify(pubJwk));
+  localStorage.setItem(pubKeyName, JSON.stringify(pubJwk));
   
   const encryptedPriv = await encryptData(privJwk); // Encrypt with local device AES key
-  localStorage.setItem('privateai_ecdh_private', encryptedPriv);
+  localStorage.setItem(privKeyName, encryptedPriv);
 }
 
 async function getMyECDHPrivateKey() {
-  const encPriv = localStorage.getItem('privateai_ecdh_private');
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+  const encPriv = localStorage.getItem('privateai_ecdh_private_' + myUid);
   if (!encPriv) return null;
   const privJwk = await decryptData(encPriv);
   return await crypto.subtle.importKey(
@@ -421,11 +426,13 @@ async function getContactPublicKey(uid) {
 async function getDeviceKey(customKeyMaterial) {
   let keyMaterial = customKeyMaterial;
   if (!keyMaterial) {
-    keyMaterial = localStorage.getItem('privateai_key_material');
+    const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+    const keyName = 'privateai_key_material_' + myUid;
+    keyMaterial = localStorage.getItem(keyName);
     if (!keyMaterial) {
       keyMaterial = Array.from(crypto.getRandomValues(new Uint8Array(32)))
         .map(b => b.toString(16).padStart(2, '0')).join('');
-      localStorage.setItem('privateai_key_material', keyMaterial);
+      localStorage.setItem(keyName, keyMaterial);
     }
   }
 
@@ -1090,14 +1097,22 @@ async function performFirestoreChunkUpload(msgId, encryptedBuffer, fileName, fil
 }
 
 async function saveChatHistories() {
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
   const encryptedChats = await encryptData(mockChatHistories);
   const encryptedAIChats = await encryptData(mockAIChatHistories);
-  localStorage.setItem('privateai_chats_v2', encryptedChats);
-  localStorage.setItem('privateai_ai_chats_v2', encryptedAIChats);
+  localStorage.setItem('privateai_chats_v2_' + myUid, encryptedChats);
+  localStorage.setItem('privateai_ai_chats_v2_' + myUid, encryptedAIChats);
 }
 
 async function loadChatHistories() {
-  const savedChats = localStorage.getItem('privateai_chats_v2');
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+  
+  // Clear in-memory chats first to avoid merging previous sessions
+  mockChatHistories = {};
+  mockAIChatHistories = {};
+  mockContacts = [];
+
+  const savedChats = localStorage.getItem('privateai_chats_v2_' + myUid);
   if (savedChats) {
     const decrypted = await decryptData(savedChats);
     if (decrypted) {
@@ -1137,7 +1152,7 @@ async function loadChatHistories() {
     }
   }
 
-  const savedAIChats = localStorage.getItem('privateai_ai_chats_v2');
+  const savedAIChats = localStorage.getItem('privateai_ai_chats_v2_' + myUid);
   if (savedAIChats) {
     const decryptedAI = await decryptData(savedAIChats);
     if (decryptedAI) mockAIChatHistories = decryptedAI;
@@ -2311,7 +2326,7 @@ async function syncUserProfileToCloud(user) {
     const userRef = db.collection('users').doc(user.uid);
     // Explicitly omitting 'email' to preserve zero-knowledge identity separation
     
-    let publicKeyObj = localStorage.getItem('privateai_ecdh_public') || null;
+    let publicKeyObj = localStorage.getItem('privateai_ecdh_public_' + user.uid) || null;
 
     await userRef.set({
       uid: user.uid,
@@ -2405,13 +2420,21 @@ function renderDiscover() {
   });
 }
 
-function saveFollowing() {
-  localStorage.setItem('privateai_following', JSON.stringify(Array.from(followingSet)));
+async function saveFollowing() {
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+  const encrypted = await encryptData(Array.from(followingSet));
+  localStorage.setItem('privateai_following_' + myUid, encrypted);
 }
 
-function loadFollowing() {
-  const saved = JSON.parse(localStorage.getItem('privateai_following') || '[]');
-  followingSet = new Set(saved);
+async function loadFollowing() {
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+  const encFollowing = localStorage.getItem('privateai_following_' + myUid);
+  if (encFollowing) {
+    try {
+      const arr = await decryptData(encFollowing);
+      if (arr) followingSet = new Set(arr);
+    } catch(e) {}
+  }
 
   // Reconstruct followed contacts so they stay in the chat tab on refresh
   followingSet.forEach(partnerId => {
@@ -3071,12 +3094,11 @@ function saveProfileEdits() {
   if (newName) userProfile.name = newName;
   userProfile.bio = newBio;
 
-  localStorage.setItem('privateai_profile', JSON.stringify(userProfile));
-
-  // Update UI
-  loadProfilePage();
-  closeProfileEditModal();
-  showSettingToast('Profile updated successfully');
+  saveProfileToStorage().then(() => {
+    loadProfilePage();
+    closeProfileEditModal();
+    showSettingToast('Profile updated successfully');
+  });
 }
 
 function updateProfileStats() {
@@ -3087,7 +3109,9 @@ function updateProfileStats() {
   const session = window.mySessionData || {};
   if (!session.mockFollowers) {
     session.mockFollowers = Math.floor(Math.random() * 50 + 10);
-    encryptData(session).then(enc => localStorage.setItem('privateai_session', enc));
+    encryptData(session).then(enc => {
+      localStorage.setItem('privateai_session', enc);
+    });
   }
   document.getElementById('stat-followers').textContent = session.mockFollowers;
 }
@@ -3121,9 +3145,10 @@ function saveProfile() {
 }
 
 async function saveProfileToStorage() {
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
   window.myProfileData = userProfile;
   const encrypted = await encryptData(userProfile);
-  localStorage.setItem('privateai_profile', encrypted);
+  localStorage.setItem('privateai_profile_' + myUid, encrypted);
 }
 
 function handleProfilePhoto(event) {
