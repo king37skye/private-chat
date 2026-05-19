@@ -148,6 +148,68 @@ function unlockApp(animate = true) {
 
 async function initSecureStorage() {
   const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+  const mySessionData = window.mySessionData || {};
+
+  // --- Automatic Data Recovery / Re-association ---
+  // If user A's data was migrated to user B's namespace because B logged in first,
+  // we check all profiles in localStorage, and if they belong to us, we pull them back.
+  if (mySessionData.uid && mySessionData.uid !== 'default') {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('privateai_profile_')) {
+          const X = key.replace('privateai_profile_', '');
+          if (X !== myUid) {
+            const keyMat = localStorage.getItem('privateai_key_material_' + X);
+            const encProfile = localStorage.getItem(key);
+            let decryptedProfile = null;
+            if (encProfile) {
+              try {
+                decryptedProfile = await decryptData(encProfile, keyMat);
+              } catch (e) {}
+              if (!decryptedProfile) {
+                try {
+                  decryptedProfile = JSON.parse(encProfile);
+                } catch (e) {}
+              }
+            }
+
+            const matchesName = decryptedProfile && decryptedProfile.name && 
+              decryptedProfile.name.toLowerCase() === mySessionData.name.toLowerCase();
+            const matchesUsername = decryptedProfile && decryptedProfile.username && mySessionData.email && 
+              decryptedProfile.username.toLowerCase() === ('@' + mySessionData.email.split('@')[0]).toLowerCase();
+
+            if (matchesName || matchesUsername) {
+              console.log(`⚠️ Misassociated data found under UID: ${X}. Re-associating to current user: ${myUid}`);
+              
+              // Migrate all keys from X to myUid
+              const keysToMigrate = [
+                'privateai_profile',
+                'privateai_following',
+                'privateai_ecdh_public',
+                'privateai_ecdh_private',
+                'privateai_chats_v2',
+                'privateai_ai_chats_v2',
+                'privateai_key_material'
+              ];
+
+              keysToMigrate.forEach(baseKey => {
+                const oldVal = localStorage.getItem(baseKey + '_' + X);
+                if (oldVal) {
+                  localStorage.setItem(baseKey + '_' + myUid, oldVal);
+                  localStorage.removeItem(baseKey + '_' + X);
+                }
+              });
+              
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Automatic recovery failed:", e);
+    }
+  }
 
   // --- Legacy Data Migration ---
   const migrations = [
