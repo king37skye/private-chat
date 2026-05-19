@@ -148,6 +148,27 @@ function unlockApp(animate = true) {
 
 async function initSecureStorage() {
   const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+
+  // --- Legacy Data Migration ---
+  const migrations = [
+    { oldKey: 'privateai_profile', newKey: 'privateai_profile_' + myUid },
+    { oldKey: 'privateai_following', newKey: 'privateai_following_' + myUid },
+    { oldKey: 'privateai_ecdh_public', newKey: 'privateai_ecdh_public_' + myUid },
+    { oldKey: 'privateai_ecdh_private', newKey: 'privateai_ecdh_private_' + myUid },
+    { oldKey: 'privateai_chats_v2', newKey: 'privateai_chats_v2_' + myUid },
+    { oldKey: 'privateai_ai_chats_v2', newKey: 'privateai_ai_chats_v2_' + myUid },
+    { oldKey: 'privateai_key_material', newKey: 'privateai_key_material_' + myUid }
+  ];
+
+  migrations.forEach(({ oldKey, newKey }) => {
+    const val = localStorage.getItem(oldKey);
+    if (val && !localStorage.getItem(newKey)) {
+      localStorage.setItem(newKey, val);
+      localStorage.removeItem(oldKey);
+    }
+  });
+  // -----------------------------
+
   const encProfile = localStorage.getItem('privateai_profile_' + myUid);
   if (encProfile) {
     try { window.myProfileData = await decryptData(encProfile); } catch(e) { window.myProfileData = {}; }
