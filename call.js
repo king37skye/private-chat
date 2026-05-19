@@ -322,8 +322,24 @@ async function sendSignalingPacket(to, payload) {
   const myUid = window.mySessionData.uid;
   const sharedSecret = [myUid, to].sort().join('_');
   
-  // encryptData is available globally from app.js
-  const encrypted = await window.encryptData(payload, sharedSecret);
+  let encrypted;
+  if (window.getContactPublicKey && window.getMyECDHPrivateKey && window.importECDHPublicKey && window.deriveECDHSharedSecret) {
+    const partnerPubKeyObj = await window.getContactPublicKey(to);
+    if (partnerPubKeyObj) {
+      try {
+        const myPrivKey = await window.getMyECDHPrivateKey();
+        const partnerPubKey = await window.importECDHPublicKey(partnerPubKeyObj);
+        const ecdhShared = await window.deriveECDHSharedSecret(myPrivKey, partnerPubKey);
+        encrypted = await window.encryptData(payload, null, ecdhShared);
+      } catch (e) {
+        console.error("ECDH signaling encryption failed, falling back", e);
+      }
+    }
+  }
+
+  if (!encrypted) {
+    encrypted = await window.encryptData(payload, sharedSecret);
+  }
   
   await window.db.collection('relay').add({
     to: to,

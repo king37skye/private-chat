@@ -105,6 +105,9 @@ function checkAuthSession() {
       window.mySessionData = userData;
       const encryptedSession = await encryptData(userData);
       localStorage.setItem('privateai_session', encryptedSession);
+      
+      await initECDHKeys();
+      
       syncUserProfileToCloud(userData);
       startNotificationListener(userData.uid);
       unlockApp(false);
@@ -349,6 +352,68 @@ let mockAIChatHistories = {
 };
 
 // =====================================================
+// ECDH ASYMMETRIC ENCRYPTION MODULE
+// =====================================================
+
+async function initECDHKeys() {
+  if (localStorage.getItem('privateai_ecdh_public') && localStorage.getItem('privateai_ecdh_private')) return;
+  
+  const keyPair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveKey", "deriveBits"]
+  );
+  
+  const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+  const privJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
+  
+  localStorage.setItem('privateai_ecdh_public', JSON.stringify(pubJwk));
+  
+  const encryptedPriv = await encryptData(privJwk); // Encrypt with local device AES key
+  localStorage.setItem('privateai_ecdh_private', encryptedPriv);
+}
+
+async function getMyECDHPrivateKey() {
+  const encPriv = localStorage.getItem('privateai_ecdh_private');
+  if (!encPriv) return null;
+  const privJwk = await decryptData(encPriv);
+  return await crypto.subtle.importKey(
+    "jwk", privJwk, { name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey", "deriveBits"]
+  );
+}
+
+async function importECDHPublicKey(pubJwkObj) {
+  return await crypto.subtle.importKey(
+    "jwk", pubJwkObj, { name: "ECDH", namedCurve: "P-256" }, true, []
+  );
+}
+
+async function deriveECDHSharedSecret(myPrivateKey, theirPublicKey) {
+  return await crypto.subtle.deriveKey(
+    { name: "ECDH", public: theirPublicKey },
+    myPrivateKey,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"]
+  );
+}
+
+const publicKeyCache = {};
+async function getContactPublicKey(uid) {
+  if (publicKeyCache[uid]) return publicKeyCache[uid];
+  if (!window.db) return null;
+  const doc = await db.collection('users').doc(uid).get();
+  if (doc.exists && doc.data().publicKey) {
+    try {
+      const pubKey = JSON.parse(doc.data().publicKey);
+      publicKeyCache[uid] = pubKey;
+      return pubKey;
+    } catch(e) {}
+  }
+  return null;
+}
+
+// =====================================================
 // ENCRYPTION MODULE (AES-256)
 // =====================================================
 
@@ -373,8 +438,8 @@ async function getDeviceKey(customKeyMaterial) {
   );
 }
 
-async function encryptData(data, customKeyMaterial) {
-  const key = await getDeviceKey(customKeyMaterial);
+async function encryptData(data, customKeyMaterial = null, ecdhSharedKey = null) {
+  const key = ecdhSharedKey || await getDeviceKey(customKeyMaterial);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoder = new TextEncoder();
   const encrypted = await crypto.subtle.encrypt(
@@ -386,14 +451,15 @@ async function encryptData(data, customKeyMaterial) {
   // Package IV + Data for storage
   return JSON.stringify({
     iv: Array.from(iv),
-    data: Array.from(new Uint8Array(encrypted))
+    data: Array.from(new Uint8Array(encrypted)),
+    isEcdh: !!ecdhSharedKey
   });
 }
 
-async function decryptData(encryptedString, customKeyMaterial) {
+async function decryptData(encryptedString, customKeyMaterial = null, ecdhSharedKey = null) {
   try {
-    const { iv, data } = JSON.parse(encryptedString);
-    const key = await getDeviceKey(customKeyMaterial);
+    const { iv, data, isEcdh } = JSON.parse(encryptedString);
+    const key = ecdhSharedKey || await getDeviceKey(customKeyMaterial);
     const decrypted = await crypto.subtle.decrypt(
       { name: "AES-GCM", iv: new Uint8Array(iv) },
       key,
@@ -407,8 +473,8 @@ async function decryptData(encryptedString, customKeyMaterial) {
   }
 }
 
-async function encryptFile(arrayBuffer, customKeyMaterial) {
-  const key = await getDeviceKey(customKeyMaterial);
+async function encryptFile(arrayBuffer, customKeyMaterial = null, ecdhSharedKey = null) {
+  const key = ecdhSharedKey || await getDeviceKey(customKeyMaterial);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv },
@@ -424,9 +490,9 @@ async function encryptFile(arrayBuffer, customKeyMaterial) {
   return packageBuffer.buffer;
 }
 
-async function decryptFile(arrayBuffer, customKeyMaterial) {
+async function decryptFile(arrayBuffer, customKeyMaterial = null, ecdhSharedKey = null) {
   try {
-    const key = await getDeviceKey(customKeyMaterial);
+    const key = ecdhSharedKey || await getDeviceKey(customKeyMaterial);
     const fullView = new Uint8Array(arrayBuffer);
     const iv = fullView.slice(0, 12);
     const data = fullView.slice(12);
@@ -440,6 +506,82 @@ async function decryptFile(arrayBuffer, customKeyMaterial) {
   } catch (e) {
     console.error("File decryption failed:", e);
     return null;
+  }
+}
+
+async function downloadAndDecryptFile(msgId, url, filename, mimeType, partnerId, autoDisplay = false) {
+  try {
+    const el = document.getElementById(`decrypt_${msgId}`);
+    if (el && !autoDisplay) {
+      const btn = el.querySelector('.file-decrypt-btn');
+      if (btn) {
+        btn.textContent = "Downloading...";
+        btn.disabled = true;
+      }
+    }
+
+    const response = await fetch(url);
+    const encryptedArrayBuffer = await response.arrayBuffer();
+
+    let decryptedBuffer;
+    const partnerPubKeyObj = await getContactPublicKey(partnerId);
+    if (partnerPubKeyObj) {
+      const myPrivKey = await getMyECDHPrivateKey();
+      const partnerPubKey = await importECDHPublicKey(partnerPubKeyObj);
+      const ecdhShared = await deriveECDHSharedSecret(myPrivKey, partnerPubKey);
+      decryptedBuffer = await decryptFile(encryptedArrayBuffer, null, ecdhShared);
+    }
+    
+    if (!decryptedBuffer) {
+      const mySession = window.mySessionData || {};
+      const myUid = mySession.uid;
+      const sharedSecret = [myUid, partnerId].sort().join('_');
+      decryptedBuffer = await decryptFile(encryptedArrayBuffer, sharedSecret);
+    }
+
+    if (!decryptedBuffer) {
+      throw new Error("Decryption failed");
+    }
+
+    const blob = new Blob([decryptedBuffer], { type: mimeType });
+    const objectUrl = URL.createObjectURL(blob);
+    const isImg = mimeType.startsWith('image/');
+    const isVid = mimeType.startsWith('video/');
+
+    if (el) {
+      if (isImg) {
+        const img = document.createElement('img');
+        img.src = objectUrl;
+        img.className = 'attachment-image';
+        img.onclick = () => openImagePreview(objectUrl);
+        el.replaceWith(img);
+      } else if (isVid) {
+        const video = document.createElement('video');
+        video.src = objectUrl;
+        video.className = 'attachment-image';
+        video.controls = true;
+        el.replaceWith(video);
+      } else {
+        el.innerHTML = `
+          <div class="file-icon" style="background:#34C759; padding:6px 10px; border-radius:6px; color:#fff; font-weight:bold; font-size:0.75rem; margin-right:10px;">📁</div>
+          <div class="file-info" style="display:flex; flex-direction:column; flex:1; text-align:left;">
+            <div class="file-name" style="font-size:0.8rem; font-weight:500; word-break:break-all;">${filename}</div>
+            <div class="file-size" style="font-size:0.65rem; color:#34C759; margin-top:2px;">Decrypted successfully!</div>
+          </div>
+          <a class="file-decrypt-btn" href="${objectUrl}" download="${filename}" style="background:#34C759; color:white; padding:6px 12px; border-radius:8px; text-decoration:none; font-size:0.8rem; display:flex; align-items:center; justify-content:center;">📥 Download</a>
+        `;
+      }
+    }
+  } catch(e) {
+    console.error("Failed to decrypt file attachment:", e);
+    const el = document.getElementById(`decrypt_${msgId}`);
+    if (el) {
+      const btn = el.querySelector('.file-decrypt-btn');
+      if (btn) {
+        btn.textContent = "Error Decrypting";
+        btn.disabled = false;
+      }
+    }
   }
 }
 
@@ -535,6 +677,18 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
       const msgId = 'm_bulk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
       const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+      let ecdhShared = null;
+      const partnerPubKeyObj = await getContactPublicKey(targetChatId);
+      if (partnerPubKeyObj) {
+        try {
+          const myPrivKey = await getMyECDHPrivateKey();
+          const partnerPubKey = await importECDHPublicKey(partnerPubKeyObj);
+          ecdhShared = await deriveECDHSharedSecret(myPrivKey, partnerPubKey);
+        } catch(e) {
+          console.error("ECDH shared secret derivation failed for bulky file upload, falling back to legacy", e);
+        }
+      }
+
       // 1. Read file locally
       const arrayBuffer = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -544,7 +698,7 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
       });
 
       // 2. Encrypt locally (AES-GCM E2EE)
-      const encryptedBuffer = await encryptFile(arrayBuffer, sharedSecret);
+      const encryptedBuffer = await encryptFile(arrayBuffer, ecdhShared ? null : sharedSecret, ecdhShared);
       const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
 
       clearInterval(progressTimer);
@@ -641,7 +795,7 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
               senderHandle: senderName,
               time: now,
               isBulky: true
-            }, sharedSecret);
+            }, ecdhShared ? null : sharedSecret, ecdhShared);
 
             await db.collection('relay').add({
               to: targetChatId,
@@ -683,6 +837,18 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
     try {
       const sharedSecret = [myUid, partnerId].sort().join('_');
       let objectUrl = msg.file.localUrl;
+
+      let ecdhShared = null;
+      const partnerPubKeyObj = await getContactPublicKey(partnerId);
+      if (partnerPubKeyObj) {
+        try {
+          const myPrivKey = await getMyECDHPrivateKey();
+          const partnerPubKey = await importECDHPublicKey(partnerPubKeyObj);
+          ecdhShared = await deriveECDHSharedSecret(myPrivKey, partnerPubKey);
+        } catch(e) {
+          console.error("ECDH shared secret derivation failed for bulky file download, falling back to legacy", e);
+        }
+      }
 
       // 1. If not cached, download and decrypt
       if (!objectUrl) {
@@ -727,7 +893,7 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
           }
           
           updateTransferCircleProgress(90, "Decrypting E2EE container...");
-          decryptedBuffer = await decryptFile(allChunks.buffer, sharedSecret);
+          decryptedBuffer = await decryptFile(allChunks.buffer, ecdhShared ? null : sharedSecret, ecdhShared);
         } else {
           // STANDARD FIREBASE STORAGE DOWNLOAD FLOW
           updateTransferCircleProgress(10, "Fetching secure payload...");
@@ -765,7 +931,7 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
           }
 
           updateTransferCircleProgress(90, "Decrypting securely...");
-          decryptedBuffer = await decryptFile(allChunks.buffer, sharedSecret);
+          decryptedBuffer = await decryptFile(allChunks.buffer, ecdhShared ? null : sharedSecret, ecdhShared);
         }
 
         if (!decryptedBuffer) throw new Error("Decryption failed");
@@ -1336,6 +1502,18 @@ async function handleFileAttachment(event) {
       // E2EE User Chat Flow
       const sharedSecret = [myUid, targetChatId].sort().join('_');
       
+      let ecdhShared = null;
+      const partnerPubKeyObj = await getContactPublicKey(targetChatId);
+      if (partnerPubKeyObj) {
+        try {
+          const myPrivKey = await getMyECDHPrivateKey();
+          const partnerPubKey = await importECDHPublicKey(partnerPubKeyObj);
+          ecdhShared = await deriveECDHSharedSecret(myPrivKey, partnerPubKey);
+        } catch(e) {
+          console.error("ECDH shared secret derivation failed for file attachment, falling back to legacy", e);
+        }
+      }
+
       // 1. Read file as ArrayBuffer
       const arrayBuffer = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -1345,7 +1523,7 @@ async function handleFileAttachment(event) {
       });
 
       // 2. Encrypt locally (E2EE)
-      const encryptedBuffer = await encryptFile(arrayBuffer, sharedSecret);
+      const encryptedBuffer = await encryptFile(arrayBuffer, ecdhShared ? null : sharedSecret, ecdhShared);
       const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
 
       // 3. Upload encrypted Blob to Firebase Storage
@@ -1418,7 +1596,7 @@ async function handleFileAttachment(event) {
               url: downloadUrl,
               senderHandle: senderName,
               time: now
-            }, sharedSecret);
+            }, ecdhShared ? null : sharedSecret, ecdhShared);
 
             await db.collection('relay').add({
               to: targetChatId,
@@ -1624,13 +1802,28 @@ async function sendMessage() {
       const senderName = savedProfile.name || (mySession ? mySession.name : 'User');
 
       if (db && myUid) {
-        // Encrypt the message for the relay using shared E2EE chat key
-        const sharedSecret = [myUid, targetChatId].sort().join('_');
-        const encryptedPacket = await encryptData({
-          text: text,
-          senderHandle: senderName,
-          time: now
-        }, sharedSecret);
+        let encryptedPacket;
+        const partnerPubKeyObj = await getContactPublicKey(targetChatId);
+        if (partnerPubKeyObj) {
+          const myPrivKey = await getMyECDHPrivateKey();
+          const partnerPubKey = await importECDHPublicKey(partnerPubKeyObj);
+          const ecdhShared = await deriveECDHSharedSecret(myPrivKey, partnerPubKey);
+          encryptedPacket = await encryptData({
+            text: text,
+            senderHandle: senderName,
+            time: now,
+            msgId: newMsg.id
+          }, null, ecdhShared);
+        } else {
+          // Fallback to legacy symmetric key
+          const sharedSecret = [myUid, targetChatId].sort().join('_');
+          encryptedPacket = await encryptData({
+            text: text,
+            senderHandle: senderName,
+            time: now,
+            msgId: newMsg.id
+          }, sharedSecret);
+        }
 
         // Send to the recipient's inbox (using their Firebase UID as ID)
         await db.collection('relay').add({
@@ -2117,11 +2310,15 @@ async function syncUserProfileToCloud(user) {
   try {
     const userRef = db.collection('users').doc(user.uid);
     // Explicitly omitting 'email' to preserve zero-knowledge identity separation
+    
+    let publicKeyObj = localStorage.getItem('privateai_ecdh_public') || null;
+
     await userRef.set({
       uid: user.uid,
       name: user.name || 'User',
       photo: user.photo || '',
       handle: '@' + (user.email ? user.email.split('@')[0] : user.uid.slice(0, 5)),
+      publicKey: publicKeyObj,
       lastActive: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
     
@@ -2558,8 +2755,24 @@ function startRelayListener() {
             continue;
           }
 
-          const sharedSecret = [myUid, from].sort().join('_');
-          const decrypted = await decryptData(packet, sharedSecret);
+          let decrypted = null;
+          try {
+            const parsed = JSON.parse(packet);
+            if (parsed.isEcdh) {
+              const partnerPubKeyObj = await getContactPublicKey(from);
+              if (partnerPubKeyObj) {
+                const myPrivKey = await getMyECDHPrivateKey();
+                const partnerPubKey = await importECDHPublicKey(partnerPubKeyObj);
+                const ecdhShared = await deriveECDHSharedSecret(myPrivKey, partnerPubKey);
+                decrypted = await decryptData(packet, null, ecdhShared);
+              }
+            }
+          } catch(e) {}
+
+          if (!decrypted) {
+            const sharedSecret = [myUid, from].sort().join('_');
+            decrypted = await decryptData(packet, sharedSecret);
+          }
 
           if (!decrypted) {
             doc.ref.delete();
@@ -2945,6 +3158,13 @@ function logOut() {
 }
 
 // Expose functions to global window at the very end to ensure they are defined
+window.encryptData = encryptData;
+window.decryptData = decryptData;
+window.getContactPublicKey = getContactPublicKey;
+window.getMyECDHPrivateKey = getMyECDHPrivateKey;
+window.importECDHPublicKey = importECDHPublicKey;
+window.deriveECDHSharedSecret = deriveECDHSharedSecret;
+window.downloadAndDecryptFile = downloadAndDecryptFile;
 window.logOut = logOut;
 window.showTab = showTab;
 window.switchMainView = showTab; // Bulletproof: Support both names
