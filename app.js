@@ -102,7 +102,9 @@ function checkAuthSession() {
         name: user.displayName || 'User',
         photo: user.photoURL
       };
-      localStorage.setItem('privateai_session', JSON.stringify(userData));
+      window.mySessionData = userData;
+      const encryptedSession = await encryptData(userData);
+      localStorage.setItem('privateai_session', encryptedSession);
       syncUserProfileToCloud(userData);
       startNotificationListener(userData.uid);
       unlockApp(false);
@@ -136,8 +138,26 @@ function unlockApp(animate = true) {
     authScreen.style.display = 'none';
   }
 
-  // Always initialize app state upon unlocking
-  initApp();
+  initSecureStorage().then(() => {
+    initApp();
+  });
+}
+
+async function initSecureStorage() {
+  const encProfile = localStorage.getItem('privateai_profile');
+  if (encProfile) {
+    try { window.myProfileData = await decryptData(encProfile); } catch(e) { window.myProfileData = {}; }
+  } else {
+    window.myProfileData = {};
+  }
+
+  const encFollowing = localStorage.getItem('privateai_following');
+  if (encFollowing) {
+    try {
+      const arr = await decryptData(encFollowing);
+      if (arr) followingSet = new Set(arr);
+    } catch(e) {}
+  }
 }
 
 // Toggle Email | Phone method
@@ -490,9 +510,9 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
   downloadBtn.style.display = 'none';
   closeBtn.textContent = 'Cancel';
 
-  const mySession = JSON.parse(localStorage.getItem('privateai_session') || '{}');
+  const mySession = window.mySessionData || {};
   const myUid = mySession.uid;
-  const savedProfile = JSON.parse(localStorage.getItem('privateai_profile') || '{}');
+  const savedProfile = window.myProfileData || {};
   const senderName = savedProfile.name || (mySession ? mySession.name : 'User');
 
   if (isUpload) {
@@ -1127,7 +1147,7 @@ function openChat(profile, isAIProfile = false) {
 
   // Send read receipts back to the partner for all unread messages
   if (db && !isAIProfile) {
-    const mySession = JSON.parse(localStorage.getItem('privateai_session') || '{}');
+    const mySession = window.mySessionData || {};
     const myUid = mySession.uid;
     const historyList = mockChatHistories[profile.id] || [];
 
@@ -1201,9 +1221,9 @@ async function handleFileAttachment(event) {
   const files = Array.from(event.target.files);
   if (!files.length) return;
 
-  const mySession = JSON.parse(localStorage.getItem('privateai_session') || '{}');
+  const mySession = window.mySessionData || {};
   const myUid = mySession.uid;
-  const savedProfile = JSON.parse(localStorage.getItem('privateai_profile') || '{}');
+  const savedProfile = window.myProfileData || {};
   const senderName = savedProfile.name || (mySession ? mySession.name : 'User');
 
   const targetChatId = currentActiveChatId;
@@ -1591,9 +1611,9 @@ async function sendMessage() {
 
     // --- REAL-TIME RELAY START ---
     try {
-      const mySession = JSON.parse(localStorage.getItem('privateai_session'));
-      const myUid = mySession ? mySession.uid : null;
-      const savedProfile = JSON.parse(localStorage.getItem('privateai_profile') || '{}');
+      const mySession = window.mySessionData || {};
+      const myUid = mySession.uid;
+      const savedProfile = window.myProfileData || {};
       const senderName = savedProfile.name || (mySession ? mySession.name : 'User');
 
       if (db && myUid) {
@@ -2089,10 +2109,10 @@ async function syncUserProfileToCloud(user) {
   if (!db || !user) return;
   try {
     const userRef = db.collection('users').doc(user.uid);
+    // Explicitly omitting 'email' to preserve zero-knowledge identity separation
     await userRef.set({
       uid: user.uid,
       name: user.name || 'User',
-      email: user.email || '',
       photo: user.photo || '',
       handle: '@' + (user.email ? user.email.split('@')[0] : user.uid.slice(0, 5)),
       lastActive: firebase.firestore.FieldValue.serverTimestamp()
@@ -2124,9 +2144,10 @@ async function fetchRealDiscoverUsers() {
   try {
     const snapshot = await db.collection('users').limit(20).get();
     const users = [];
+    const mySession = window.mySessionData || {};
     snapshot.forEach(doc => {
       const data = doc.data();
-      if (data.uid !== (JSON.parse(localStorage.getItem('privateai_session')) || {}).uid) {
+      if (data.uid !== mySession.uid) {
         users.push({
           id: data.uid,
           name: data.name,
@@ -2253,7 +2274,7 @@ function formatFollowers(n) {
 async function toggleFollow(userId, btn) {
   const user = discoverFilteredUsers.find(u => u.id === userId);
   if (!user) return;
-  const mySession = JSON.parse(localStorage.getItem('privateai_session'));
+  const mySession = window.mySessionData || {};
   
   if (followingSet.has(userId)) {
     followingSet.delete(userId);
@@ -2358,7 +2379,7 @@ async function openUserListModal(type) {
   const modal = document.getElementById('user-list-modal');
   const title = document.getElementById('user-list-title');
   const content = document.getElementById('user-list-content');
-  const mySession = JSON.parse(localStorage.getItem('privateai_session'));
+  const mySession = window.mySessionData || {};
 
   modal.style.display = 'flex';
   content.innerHTML = '<div class="loading-spinner" style="margin:40px auto;"></div>';
@@ -2512,7 +2533,7 @@ function closeSettingsDetail() {
 
 // Global Listener for incoming Relay messages
 function startRelayListener() {
-  const session = JSON.parse(localStorage.getItem('privateai_session') || '{}');
+  const session = window.mySessionData || {};
   const myUid = session.uid;
   if (!db || !myUid) return;
 
@@ -2523,9 +2544,23 @@ function startRelayListener() {
       for (const change of snapshot.docChanges()) {
         if (change.type === 'added') {
           const doc = change.doc;
-          const { from, packet, msgId, type, status } = doc.data();
+          const { from, packet, msgId: legacyMsgId } = doc.data();
 
-          if (type === 'receipt') {
+          if (!packet) {
+            doc.ref.delete();
+            continue;
+          }
+
+          const sharedSecret = [myUid, from].sort().join('_');
+          const decrypted = await decryptData(packet, sharedSecret);
+
+          if (!decrypted) {
+            doc.ref.delete();
+            continue;
+          }
+
+          if (decrypted.type === 'receipt') {
+            const { msgId, status } = decrypted;
             // Update E2EE ticks in local history and DOM!
             const history = mockChatHistories[from];
             if (history) {
@@ -2564,18 +2599,15 @@ function startRelayListener() {
             continue;
           }
 
-          // Decrypt the incoming packet using shared E2EE chat key
-          const sharedSecret = [myUid, from].sort().join('_');
-          const decrypted = await decryptData(packet, sharedSecret);
-          if (decrypted) {
-            const incomingMsg = {
-              id: 'm_relay_' + doc.id,
-              originalId: msgId, // Store sender's original message ID
-              text: decrypted.type === 'file' ? `📂 ${decrypted.name}` : decrypted.text,
-              sender: 'them',
-              time: decrypted.time,
-              isReadByMe: currentActiveChatId === from
-            };
+          // Otherwise it is a normal message
+          const incomingMsg = {
+            id: 'm_relay_' + doc.id,
+            originalId: decrypted.msgId || legacyMsgId,
+            text: decrypted.type === 'file' ? `📂 ${decrypted.name}` : decrypted.text,
+            sender: 'them',
+            time: decrypted.time,
+            isReadByMe: currentActiveChatId === from
+          };
 
             if (decrypted.type === 'file') {
               incomingMsg.file = {
@@ -2631,13 +2663,18 @@ function startRelayListener() {
             saveChatHistories();
 
             // Send back E2EE delivery/read receipt immediately
-            if (db && msgId) {
+            if (db && incomingMsg.originalId) {
+              const receiptSecret = [myUid, from].sort().join('_');
+              const encryptedReceipt = await encryptData({
+                type: 'receipt',
+                msgId: incomingMsg.originalId,
+                status: currentActiveChatId === from ? 'read' : 'delivered'
+              }, receiptSecret);
+
               db.collection('relay').add({
                 to: from, // Send back to original sender
                 from: myUid,
-                type: 'receipt',
-                msgId: msgId,
-                status: currentActiveChatId === from ? 'read' : 'delivered',
+                packet: encryptedReceipt,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
               }).catch(err => console.error("Failed sending E2EE receipt:", err));
             }
@@ -2665,9 +2702,8 @@ let userProfile = {
 let followRequests = [];
 
 function loadProfilePage() {
-  // Load from session or stored profile
-  const session = JSON.parse(localStorage.getItem('privateai_session') || '{}');
-  const saved = JSON.parse(localStorage.getItem('privateai_profile') || '{}');
+  const session = window.mySessionData || {};
+  const saved = window.myProfileData || {};
 
   userProfile = {
     name: saved.name || session.name || 'You',
@@ -2813,10 +2849,10 @@ function updateProfileStats() {
   document.getElementById('stat-chats').textContent = mockContacts.length;
 
   // Followers: Use a fixed random number stored in session if not present
-  const session = JSON.parse(localStorage.getItem('privateai_session') || '{}');
+  const session = window.mySessionData || {};
   if (!session.mockFollowers) {
     session.mockFollowers = Math.floor(Math.random() * 50 + 10);
-    localStorage.setItem('privateai_session', JSON.stringify(session));
+    encryptData(session).then(enc => localStorage.setItem('privateai_session', enc));
   }
   document.getElementById('stat-followers').textContent = session.mockFollowers;
 }
@@ -2849,8 +2885,10 @@ function saveProfile() {
   showSettingToast('✓ Profile saved successfully!');
 }
 
-function saveProfileToStorage() {
-  localStorage.setItem('privateai_profile', JSON.stringify(userProfile));
+async function saveProfileToStorage() {
+  window.myProfileData = userProfile;
+  const encrypted = await encryptData(userProfile);
+  localStorage.setItem('privateai_profile', encrypted);
 }
 
 function handleProfilePhoto(event) {
