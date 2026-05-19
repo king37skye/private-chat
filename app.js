@@ -338,6 +338,7 @@ let selectedMessages = new Set();
 let currentActiveChatId = null;
 let currentMainTab = 'chats'; // 'chats' or 'ais'
 let currentActiveAI = null; // Track if we are chatting with an AI profile
+let followingSet = new Set();
 
 // Mock Contacts Data
 const mockContacts = [];
@@ -1131,7 +1132,7 @@ async function loadChatHistories() {
   // Clear in-memory chats first to avoid merging previous sessions
   mockChatHistories = {};
   mockAIChatHistories = {};
-  mockContacts = [];
+  mockContacts.length = 0;
 
   const savedChats = localStorage.getItem('privateai_chats_v2_' + myUid);
   if (savedChats) {
