@@ -1119,6 +1119,11 @@ function openChat(profile, isAIProfile = false) {
   document.getElementById('nav-subtitle').style.display = isAIProfile ? 'none' : 'block';
 
   backBtn.style.display = 'flex';
+  
+  const navRightActions = document.getElementById('nav-right-actions');
+  if (navRightActions) {
+    navRightActions.style.display = isAIProfile ? 'none' : 'flex';
+  }
 
 
   const container = isAIProfile ? aiContainer : chatContainer;
@@ -1207,6 +1212,8 @@ function closeChat() {
     const titles = { chats: 'Chats', discover: 'Discover', profile: 'Profile' };
     navTitle.textContent = titles[currentMainView] || 'Chats';
     backBtn.style.display = 'none';
+    const navRightActions = document.getElementById('nav-right-actions');
+    if (navRightActions) navRightActions.style.display = 'none';
   }, 300);
 }
 
@@ -2555,6 +2562,14 @@ function startRelayListener() {
           const decrypted = await decryptData(packet, sharedSecret);
 
           if (!decrypted) {
+            doc.ref.delete();
+            continue;
+          }
+
+          if (decrypted.type && decrypted.type.startsWith('call_')) {
+            if (window.handleCallSignaling) {
+              window.handleCallSignaling(from, decrypted);
+            }
             doc.ref.delete();
             continue;
           }
