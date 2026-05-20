@@ -248,22 +248,36 @@
 
       <!-- PROFILE VIEW -->
       <div class="view-panel main-panel" id="profile-view">
+        <!-- Profile Header Navigation -->
+        <div class="profile-header-nav" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(30,30,35,0.3); backdrop-filter: blur(20px);">
+          <button class="profile-back-btn" id="profile-back-btn" onclick="goBackFromProfile()" style="display: none; background: none; border: none; color: #fff; cursor: pointer; padding: 4px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <div class="profile-header-title" id="profile-header-title" style="font-weight: 600; font-size: 1.1rem; color: #fff; flex-grow: 1; text-align: center;">Profile</div>
+          <button class="profile-settings-btn" id="profile-settings-btn" onclick="openSettingsModal()" style="background: none; border: none; color: #fff; cursor: pointer; padding: 4px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          </button>
+        </div>
+
         <!-- Profile Hero -->
-        <div class="profile-hero">
-          <div class="profile-avatar-wrap">
-            <div class="profile-avatar" id="profile-avatar-display">?</div>
-            <button class="profile-avatar-edit" onclick="document.getElementById('profile-photo-input').click()" title="Change photo">
+        <div class="profile-hero" style="text-align: center; padding: 24px 16px;">
+          <div class="profile-avatar-wrap" style="position: relative; width: 100px; height: 100px; margin: 0 auto 16px;">
+            <div class="profile-avatar" id="profile-avatar-display" style="width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: bold; background: linear-gradient(135deg, #5E5CE6, #BF5AF2); color: #fff; box-shadow: 0 8px 24px rgba(94, 92, 230, 0.3);">?</div>
+            <button class="profile-avatar-edit" id="profile-avatar-edit-btn" onclick="document.getElementById('profile-photo-input').click()" title="Change photo" style="position: absolute; bottom: 0; right: 0; background: var(--accent); border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: transform 0.2s;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 0 2-2l4-4h6l2 2h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
             </button>
             <input type="file" id="profile-photo-input" accept="image/*" style="display:none" onchange="handleProfilePhoto(event)">
           </div>
           <div class="profile-name-section">
-            <div class="profile-display-name" id="profile-display-name">Loading...</div>
-            <div class="profile-handle" id="profile-handle-display">@user</div>
-            <div class="profile-status" id="profile-status-display">Secure & Encrypted</div>
-            <button class="profile-edit-btn" onclick="openProfileEditModal()" style="margin-top: 12px; padding: 8px 20px; border-radius: 20px; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; font-size: 0.85rem; font-weight: 600;">Edit Profile</button>
+            <div class="profile-display-name" id="profile-display-name" style="font-size: 1.5rem; font-weight: 700; color: #fff; margin-bottom: 4px;">Loading...</div>
+            <div class="profile-handle" id="profile-handle-display" style="font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 8px;">@user</div>
+            <div class="profile-status" id="profile-status-display" style="font-size: 0.9rem; color: var(--text-tertiary); max-width: 300px; margin: 0 auto 12px; line-height: 1.4;">Secure & Encrypted</div>
+            <div class="profile-actions-row" id="profile-actions-row" style="display: none; justify-content: center; gap: 12px; margin-top: 16px;">
+              <button class="profile-action-btn-main" id="profile-follow-btn" onclick="toggleFollowFromProfilePage()" style="background: var(--accent); color: #fff; border: none; padding: 10px 24px; border-radius: 20px; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: background 0.2s, transform 0.1s;">Follow</button>
+              <button class="profile-action-btn-main" id="profile-message-btn" onclick="startChatFromProfilePage()" style="background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 10px 24px; border-radius: 20px; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: background 0.2s, transform 0.1s;">Message</button>
+            </div>
           </div>
-          <div class="profile-status-row">
+          <div class="profile-status-row" id="profile-status-pill-row" style="display: flex; justify-content: center; gap: 8px; margin-top: 16px;">
             <button class="status-pill active" id="status-online" onclick="setStatus('online')">🟢 Online</button>
             <button class="status-pill" id="status-busy" onclick="setStatus('busy')">🔴 Busy</button>
             <button class="status-pill" id="status-away" onclick="setStatus('away')">🟡 Away</button>
@@ -271,102 +285,37 @@
         </div>
 
         <!-- Stats -->
-        <div class="profile-stats">
-          <div class="stat-item" onclick="openUserListModal('followers')">
-            <div class="stat-num" id="stat-followers">0</div>
-            <div class="stat-label">Followers</div>
+        <div class="profile-stats" style="display: flex; justify-content: space-around; align-items: center; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 16px 0;">
+          <div class="stat-item" onclick="openUserListModal('followers')" style="text-align: center; flex: 1; cursor: pointer;">
+            <div class="stat-num" id="stat-followers" style="font-size: 1.25rem; font-weight: 700; color: #fff;">0</div>
+            <div class="stat-label" style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Followers</div>
           </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item" onclick="openUserListModal('following')">
-            <div class="stat-num" id="stat-following">0</div>
-            <div class="stat-label">Following</div>
+          <div class="stat-divider" style="width: 1px; height: 24px; background: rgba(255,255,255,0.1);"></div>
+          <div class="stat-item" onclick="openUserListModal('following')" style="text-align: center; flex: 1; cursor: pointer;">
+            <div class="stat-num" id="stat-following" style="font-size: 1.25rem; font-weight: 700; color: #fff;">0</div>
+            <div class="stat-label" style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Following</div>
           </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <div class="stat-num" id="stat-chats">4</div>
-            <div class="stat-label">Chats</div>
+          <div class="stat-divider" style="width: 1px; height: 24px; background: rgba(255,255,255,0.1);"></div>
+          <div class="stat-item" style="text-align: center; flex: 1;">
+            <div class="stat-num" id="stat-media" style="font-size: 1.25rem; font-weight: 700; color: #fff;">0</div>
+            <div class="stat-label" style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Media</div>
           </div>
         </div>
 
-        <!-- Follow Requests -->
-        <div class="profile-section">
+        <!-- Follow Requests (Only visible on self-profile) -->
+        <div class="profile-section" id="profile-follow-requests-section">
           <div class="profile-section-title">Follow Requests</div>
           <div id="follow-requests-list" class="follow-requests-list">
             <!-- Injected by app.js -->
           </div>
         </div>
 
-        <!-- Edit Profile -->
-        <div class="profile-section">
-          <div class="profile-section-title">Edit Profile</div>
-          <div class="profile-edit-field">
-            <label class="profile-edit-label">Display Name</label>
-            <input type="text" id="edit-display-name" class="profile-edit-input" placeholder="Your name">
+        <!-- Media Gallery Section -->
+        <div class="profile-section" style="padding-bottom: 120px;">
+          <div class="profile-section-title">Photos & Videos</div>
+          <div class="profile-gallery-grid" id="profile-gallery-grid">
+            <!-- Upload media tile (ours only) and media items injected by app.js -->
           </div>
-          <div class="profile-edit-field">
-            <label class="profile-edit-label">Username</label>
-            <input type="text" id="edit-username" class="profile-edit-input" placeholder="@yourhandle">
-          </div>
-          <div class="profile-edit-field">
-            <label class="profile-edit-label">Bio</label>
-            <textarea id="edit-bio" class="profile-edit-input" rows="3" placeholder="Tell people about yourself..."></textarea>
-          </div>
-          <button class="profile-save-btn" onclick="saveProfile()">Save Changes</button>
-        </div>
-
-        <!-- Settings -->
-        <div class="profile-section">
-          <div class="profile-section-title">Settings</div>
-          <div class="settings-list">
-            <button class="settings-item" onclick="openSettingsDetail('privacy')">
-              <div class="settings-item-icon" style="background: rgba(94,92,230,0.2);">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5E5CE6" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-              </div>
-              <div class="settings-item-text">
-                <div class="settings-item-title">Privacy &amp; Security</div>
-                <div class="settings-item-sub">End-to-end encrypted · Always on</div>
-              </div>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-            <button class="settings-item" onclick="openSettingsDetail('notifications')">
-              <div class="settings-item-icon" style="background: rgba(50,173,230,0.2);">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#32ADE6" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-              </div>
-              <div class="settings-item-text">
-                <div class="settings-item-title">Notifications</div>
-                <div class="settings-item-sub">Manage alerts and sounds</div>
-              </div>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-            <button class="settings-item" onclick="openSettingsDetail('storage')">
-              <div class="settings-item-icon" style="background: rgba(52,199,89,0.2);">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34C759" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              </div>
-              <div class="settings-item-text">
-                <div class="settings-item-title">Storage &amp; Data</div>
-                <div class="settings-item-sub">Local · Zero cloud exposure</div>
-              </div>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-            <button class="settings-item" onclick="openSettingsDetail('appearance')">
-              <div class="settings-item-icon" style="background: rgba(255,159,10,0.2);">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF9F0A" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-              </div>
-              <div class="settings-item-text">
-                <div class="settings-item-title">Appearance</div>
-                <div class="settings-item-sub">Dark mode · Privacy by design</div>
-              </div>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Log Out -->
-        <div class="profile-section" style="padding-bottom: 120px; margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
-          <button class="logout-btn" onclick="logOut()">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-            Log Out
-          </button>
         </div>
 
         <!-- Toast Notification -->
@@ -499,32 +448,108 @@
           <!-- Injected by JS -->
         </div>
         <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
-          <button class="profile-save-btn" style="width: auto; padding: 10px 24px;" onclick="closeSettingsDetail()">Done</button>
-        </div>
-    
-    <!-- Profile Edit Modal -->
-    <div class="modal-overlay" id="profile-edit-modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 style="margin:0;">Edit Profile</h3>
-          <button class="modal-close" onclick="closeProfileEditModal()">&times;</button>
-        </div>
-        <div class="modal-body" style="padding: 20px 0;">
-          <div class="auth-field">
-            <label class="auth-label">Display Name</label>
-            <input type="text" id="edit-profile-name" class="auth-input" placeholder="Your name">
-          </div>
-          <div class="auth-field">
-            <label class="auth-label">Bio</label>
-            <textarea id="edit-profile-bio" class="auth-input" style="height: 80px; resize: none; margin-top: 8px;" placeholder="Tell us about yourself..."></textarea>
-          </div>
-        </div>
-        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
-          <button class="profile-save-btn" style="background: rgba(255,255,255,0.1); color: #fff; width: auto; padding: 10px 24px;" onclick="closeProfileEditModal()">Cancel</button>
-          <button class="profile-save-btn" style="width: auto; padding: 10px 24px;" onclick="saveProfileEdits()">Save Changes</button>
+          <button class="profile-save-btn" style="width: auto; padding: 10px 24px;" onclick="closeSettingsDetail()">Close</button>
         </div>
       </div>
     </div>
+
+    <!-- Settings & Profile Edit Modal -->
+    <div class="modal-overlay" id="settings-modal">
+      <div class="modal-content" style="max-height: 85vh; overflow-y: auto;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 12px; margin-bottom: 16px;">
+          <h3 style="margin:0; font-size:1.2rem; font-weight:600; color:#fff;">Settings & Profile</h3>
+          <button class="modal-close" onclick="closeSettingsModal()" style="background:none; border:none; color:#fff; font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 0;">
+          <!-- Edit Profile fields -->
+          <div class="auth-field" style="margin-bottom:16px;">
+            <label class="auth-label" style="display:block; font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Display Name</label>
+            <input type="text" id="edit-display-name" class="auth-input" placeholder="Your name" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:10px; color:#fff; font-size:0.9rem;">
+          </div>
+          <div class="auth-field" style="margin-bottom:16px;">
+            <label class="auth-label" style="display:block; font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Username</label>
+            <input type="text" id="edit-username" class="auth-input" placeholder="@yourhandle" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:10px; color:#fff; font-size:0.9rem;">
+          </div>
+          <div class="auth-field" style="margin-bottom:16px;">
+            <label class="auth-label" style="display:block; font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Bio</label>
+            <textarea id="edit-bio" class="auth-input" style="width:100%; height: 60px; resize: none; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:10px; color:#fff; font-size:0.9rem;" placeholder="Tell us about yourself..."></textarea>
+          </div>
+
+          <!-- Status pills -->
+          <div class="auth-field" style="margin-bottom:20px;">
+            <label class="auth-label" style="display:block; font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Availability Status</label>
+            <div class="profile-status-row" style="display:flex; gap:8px;">
+              <button class="status-pill active" id="modal-status-online" onclick="setStatus('online')">🟢 Online</button>
+              <button class="status-pill" id="modal-status-busy" onclick="setStatus('busy')">🔴 Busy</button>
+              <button class="status-pill" id="modal-status-away" onclick="setStatus('away')">🟡 Away</button>
+            </div>
+          </div>
+
+          <hr style="border:none; border-top: 1px solid rgba(255,255,255,0.05); margin: 20px 0;">
+
+          <!-- App Settings options -->
+          <div class="settings-list" style="margin-bottom: 20px; display:flex; flex-direction:column; gap:8px;">
+            <button class="settings-item" onclick="openSettingsDetail('privacy')" style="width:100%; display:flex; align-items:center; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:12px; padding:12px 16px; cursor:pointer; text-align:left;">
+              <div class="settings-item-icon" style="background: rgba(94,92,230,0.2); width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-right:12px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5E5CE6" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              </div>
+              <div class="settings-item-text" style="flex-grow:1;">
+                <div class="settings-item-title" style="font-weight:600; font-size:0.9rem; color:#fff;">Privacy &amp; Security</div>
+                <div class="settings-item-sub" style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">End-to-end encrypted · Always on</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <button class="settings-item" onclick="openSettingsDetail('notifications')" style="width:100%; display:flex; align-items:center; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:12px; padding:12px 16px; cursor:pointer; text-align:left;">
+              <div class="settings-item-icon" style="background: rgba(50,173,230,0.2); width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-right:12px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#32ADE6" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+              </div>
+              <div class="settings-item-text" style="flex-grow:1;">
+                <div class="settings-item-title" style="font-weight:600; font-size:0.9rem; color:#fff;">Notifications</div>
+                <div class="settings-item-sub" style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">Manage alerts and sounds</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <button class="settings-item" onclick="openSettingsDetail('storage')" style="width:100%; display:flex; align-items:center; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:12px; padding:12px 16px; cursor:pointer; text-align:left;">
+              <div class="settings-item-icon" style="background: rgba(52,199,89,0.2); width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-right:12px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34C759" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+              <div class="settings-item-text" style="flex-grow:1;">
+                <div class="settings-item-title" style="font-weight:600; font-size:0.9rem; color:#fff;">Storage &amp; Data</div>
+                <div class="settings-item-sub" style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">Local · Zero cloud exposure</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <button class="settings-item" onclick="openSettingsDetail('appearance')" style="width:100%; display:flex; align-items:center; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:12px; padding:12px 16px; cursor:pointer; text-align:left;">
+              <div class="settings-item-icon" style="background: rgba(255,159,10,0.2); width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-right:12px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF9F0A" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+              </div>
+              <div class="settings-item-text" style="flex-grow:1;">
+                <div class="settings-item-title" style="font-weight:600; font-size:0.9rem; color:#fff;">Appearance</div>
+                <div class="settings-item-sub" style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">Dark mode · Privacy by design</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-tertiary)"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+
+          <hr style="border:none; border-top: 1px solid rgba(255,255,255,0.05); margin: 20px 0;">
+
+          <button class="logout-btn" onclick="logOut()" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; background:rgba(255,69,58,0.15); border:1px solid rgba(255,69,58,0.2); border-radius:12px; color:#FF453A; font-weight:600; cursor:pointer;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            Log Out
+          </button>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 16px;">
+          <button class="profile-save-btn" style="background: rgba(255,255,255,0.1); color: #fff; width: auto; padding: 10px 24px; border:none; border-radius:12px; font-weight:600; cursor:pointer;" onclick="closeSettingsModal()">Cancel</button>
+          <button class="profile-save-btn" style="width: auto; padding: 10px 24px; background:var(--accent); color:#fff; border:none; border-radius:12px; font-weight:600; cursor:pointer;" onclick="saveProfile().then(closeSettingsModal)">Save Changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fullscreen Media Viewer Modal -->
+    <div class="modal-overlay" id="media-viewer-modal" onclick="closeMediaViewer()" style="z-index: 10005;">
+      <button class="modal-close" style="position: absolute; top: 20px; right: 20px; font-size: 32px; color: #fff; background: none; border: none; cursor: pointer; z-index: 10007;" onclick="closeMediaViewer()">&times;</button>
+      <div class="media-viewer-content" onclick="event.stopPropagation()" style="max-width: 90%; max-height: 90%; display: flex; align-items: center; justify-content: center;">
+        <!-- Dynamic media element injected here -->
       </div>
     </div>
     

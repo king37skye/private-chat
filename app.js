@@ -2370,6 +2370,7 @@ function deliverAIResponse(text, badge) {
 // =====================================================
 
 let currentMainView = 'chats';
+let previousView = 'chats';
 
 function showTab(view) {
   // Map 'chat' from HTML to 'chats' in JS
@@ -2378,6 +2379,10 @@ function showTab(view) {
   // If we are in a chat, close it when switching to Discover or Profile
   if (internalView !== 'chats' && currentActiveChatId) {
     closeChat();
+  }
+
+  if (internalView !== 'profile') {
+    previousView = internalView;
   }
 
   currentMainView = internalView;
@@ -2407,7 +2412,7 @@ function showTab(view) {
 
   // Load the appropriate view content
   if (internalView === 'discover') fetchRealDiscoverUsers();
-  if (internalView === 'profile') loadProfilePage();
+  if (internalView === 'profile') loadProfilePage(activeProfileUid);
 }
 
 // --- REAL-TIME DISCOVERY ENGINE ---
@@ -2429,6 +2434,7 @@ async function syncUserProfileToCloud(user) {
     const name = localProfile.name || user.name || 'User';
     const handle = (localProfile.username || ('@' + (user.email ? user.email.split('@')[0] : user.uid.slice(0, 5)))).toLowerCase();
     const bio = localProfile.bio || 'Encrypted space of a private user.';
+    const media = localProfile.media || [];
 
     await userRef.set({
       uid: user.uid,
@@ -2436,6 +2442,7 @@ async function syncUserProfileToCloud(user) {
       photo: localProfile.avatarUrl || user.photo || '',
       handle: handle,
       bio: bio,
+      media: media,
       publicKey: publicKeyObj,
       lastActive: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
@@ -2602,22 +2609,46 @@ function formatFollowers(n) {
 }
 
 async function toggleFollow(userId, btn) {
-  const user = discoverFilteredUsers.find(u => u.id === userId);
-  if (!user) return;
   const mySession = window.mySessionData || {};
+  let user = discoverFilteredUsers.find(u => u.id === userId);
+  
+  if (!user) {
+    if (activeProfileUid === userId && window.activeProfileData) {
+      user = {
+        id: userId,
+        name: window.activeProfileData.name,
+        avatar: window.activeProfileData.photo || '👤'
+      };
+    } else {
+      user = { id: userId, name: 'User', avatar: '👤' };
+    }
+  }
   
   if (followingSet.has(userId)) {
     followingSet.delete(userId);
-    btn.textContent = 'Follow';
-    btn.classList.remove('following');
+    if (btn) {
+      btn.textContent = 'Follow';
+      btn.classList.remove('following');
+    }
     saveFollowing();
+    
+    // Update stats on UI if viewing their profile
+    if (activeProfileUid === userId) {
+      const followersEl = document.getElementById('stat-followers');
+      if (followersEl) {
+        let count = parseInt(followersEl.textContent, 10) || 0;
+        followersEl.textContent = Math.max(0, count - 1);
+      }
+    }
   } else {
     followingSet.add(userId);
-    btn.textContent = 'Following';
-    btn.classList.add('following');
+    if (btn) {
+      btn.textContent = 'Following';
+      btn.classList.add('following');
+    }
     saveFollowing();
 
-    if (db && mySession) {
+    if (db && mySession.uid) {
       db.collection('notifications').add({
         to: userId,
         from: mySession.uid,
@@ -2632,28 +2663,21 @@ async function toggleFollow(userId, btn) {
       mockContacts.unshift({ id: userId, name: user.name, avatar: user.avatar, lastMessage: 'Tap to start a secure chat', time: 'Now', unread: 0 });
       renderContacts();
     }
+
+    // Update stats on UI if viewing their profile
+    if (activeProfileUid === userId) {
+      const followersEl = document.getElementById('stat-followers');
+      if (followersEl) {
+        let count = parseInt(followersEl.textContent, 10) || 0;
+        followersEl.textContent = count + 1;
+      }
+    }
   }
 }
 
 function openOtherProfile(userId) {
-  const user = discoverFilteredUsers.find(u => u.id === userId);
-  if (!user) return;
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay active';
-  modal.innerHTML = `
-    <div class="modal-content" style="text-align:center; padding: 40px 20px;">
-      <div class="profile-avatar-large" style="width:100px; height:100px; margin:0 auto 20px; font-size:40px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border-radius:50%;">
-        ${user.avatar}
-      </div>
-      <h2 style="margin-bottom:4px;">${user.name}</h2>
-      <p style="color:var(--text-secondary); margin-bottom:20px;">${user.handle}</p>
-      <p style="margin-bottom:30px; line-height:1.5;">${user.bio}</p>
-      <div style="display:flex; gap:12px; justify-content:center;">
-        <button class="tab-btn active" style="flex:1;" onclick="startChatFromProfile('${user.id}')">Message</button>
-        <button class="tab-btn" style="flex:1;" onclick="document.body.removeChild(this.closest('.modal-overlay'))">Close</button>
-      </div>
-    </div>`;
-  document.body.appendChild(modal);
+  activeProfileUid = userId;
+  showTab('profile');
 }
 
 function startChatFromProfile(userId) {
@@ -3057,40 +3081,400 @@ let userProfile = {
   username: '@king',
   bio: 'The ruler of this private domain.',
   status: 'online',
-  avatarUrl: null
+  avatarUrl: null,
+  media: []
 };
 
 let followRequests = [];
+let activeProfileUid = null;
+window.activeProfileData = null;
 
-function loadProfilePage() {
+async function loadProfilePage(profileUid) {
   const session = window.mySessionData || {};
-  const saved = window.myProfileData || {};
+  const myUid = session.uid || 'default';
+  
+  const backBtn = document.getElementById('profile-back-btn');
+  const settingsBtn = document.getElementById('profile-settings-btn');
+  const avatarEditBtn = document.getElementById('profile-avatar-edit-btn');
+  const actionsRow = document.getElementById('profile-actions-row');
+  const statusPillRow = document.getElementById('profile-status-pill-row');
+  const followRequestsSection = document.getElementById('profile-follow-requests-section');
+  const headerTitle = document.getElementById('profile-header-title');
 
-  userProfile = {
-    name: saved.name || session.name || 'You',
-    username: saved.username || (session.email ? '@' + session.email.split('@')[0] : '@user'),
-    bio: saved.bio || 'Encrypted space of a private user.',
-    status: saved.status || 'online',
-    avatarUrl: saved.avatarUrl || null
-  };
-
-  // Render to DOM
-  document.getElementById('profile-display-name').textContent = userProfile.name;
-  document.getElementById('profile-handle-display').textContent = userProfile.username;
-  document.getElementById('profile-status-display').textContent = userProfile.bio;
-
-  // Avatar
-  const avatarEl = document.getElementById('profile-avatar-display');
-  if (userProfile.avatarUrl) {
-    avatarEl.innerHTML = `<img src="${userProfile.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
-  } else {
-    avatarEl.textContent = userProfile.name.charAt(0).toUpperCase();
+  const galleryGrid = document.getElementById('profile-gallery-grid');
+  if (galleryGrid) {
+    galleryGrid.innerHTML = '<div class="loading-spinner" style="margin:20px auto; grid-column: 1 / span 3;"></div>';
   }
 
-  // Status
-  setStatus(userProfile.status, false);
-  updateProfileStats();
-  renderFollowRequests();
+  if (!profileUid || profileUid === myUid) {
+    // ---------------- OWN PROFILE ----------------
+    activeProfileUid = null;
+    if (headerTitle) headerTitle.textContent = "My Profile";
+    if (backBtn) backBtn.style.display = 'none';
+    if (settingsBtn) settingsBtn.style.display = 'block';
+    if (avatarEditBtn) avatarEditBtn.style.display = 'flex';
+    if (actionsRow) actionsRow.style.display = 'none';
+    if (statusPillRow) statusPillRow.style.display = 'flex';
+    if (followRequestsSection) followRequestsSection.style.display = 'block';
+
+    const saved = window.myProfileData || {};
+    userProfile = {
+      name: saved.name || session.name || 'You',
+      username: saved.username || (session.email ? '@' + session.email.split('@')[0] : '@user'),
+      bio: saved.bio || 'Encrypted space of a private user.',
+      status: saved.status || 'online',
+      avatarUrl: saved.avatarUrl || null,
+      media: saved.media || []
+    };
+
+    // Render to DOM
+    document.getElementById('profile-display-name').textContent = userProfile.name;
+    document.getElementById('profile-handle-display').textContent = userProfile.username;
+    document.getElementById('profile-status-display').textContent = userProfile.bio;
+
+    // Avatar
+    const avatarEl = document.getElementById('profile-avatar-display');
+    if (userProfile.avatarUrl) {
+      avatarEl.innerHTML = `<img src="${userProfile.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    } else {
+      avatarEl.textContent = userProfile.name.charAt(0).toUpperCase();
+    }
+
+    // Status
+    setStatus(userProfile.status, false);
+
+    // Stats
+    document.getElementById('stat-followers').textContent = parseInt(localStorage.getItem('privateai_followers_count_' + myUid)) || 0;
+    document.getElementById('stat-following').textContent = followingSet.size;
+    document.getElementById('stat-media').textContent = userProfile.media.length;
+
+    renderFollowRequests();
+    renderMediaGallery(userProfile.media, true);
+
+  } else {
+    // ---------------- OTHER USER'S PROFILE ----------------
+    activeProfileUid = profileUid;
+    if (headerTitle) headerTitle.textContent = "Profile";
+    if (backBtn) backBtn.style.display = 'block';
+    if (settingsBtn) settingsBtn.style.display = 'none';
+    if (avatarEditBtn) avatarEditBtn.style.display = 'none';
+    if (actionsRow) actionsRow.style.display = 'flex';
+    if (statusPillRow) statusPillRow.style.display = 'none';
+    if (followRequestsSection) followRequestsSection.style.display = 'none';
+
+    let userDetails = null;
+    if (db) {
+      try {
+        const doc = await db.collection('users').doc(profileUid).get();
+        if (doc.exists) {
+          userDetails = doc.data();
+        }
+      } catch (err) {
+        console.error("Failed to fetch user profile details:", err);
+      }
+    }
+
+    if (!userDetails) {
+      const discUser = discoverFilteredUsers.find(u => u.id === profileUid);
+      userDetails = discUser ? {
+        name: discUser.name,
+        handle: discUser.handle,
+        bio: discUser.bio,
+        photo: discUser.avatar !== '👤' ? discUser.avatar : null,
+        media: [],
+        followers: 0,
+        following: 0
+      } : {
+        name: 'Private User',
+        handle: '@user',
+        bio: 'Securely separated identity.',
+        media: [],
+        followers: 0,
+        following: 0
+      };
+    }
+
+    window.activeProfileData = userDetails;
+
+    // Render to DOM
+    document.getElementById('profile-display-name').textContent = userDetails.name || 'Private User';
+    document.getElementById('profile-handle-display').textContent = userDetails.handle || '@user';
+    document.getElementById('profile-status-display').textContent = userDetails.bio || 'Securely separated identity.';
+
+    // Avatar
+    const avatarEl = document.getElementById('profile-avatar-display');
+    if (userDetails.photo) {
+      avatarEl.innerHTML = `<img src="${userDetails.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    } else {
+      avatarEl.textContent = (userDetails.name || 'P').charAt(0).toUpperCase();
+    }
+
+    // Follow/Unfollow button text & class
+    const followBtn = document.getElementById('profile-follow-btn');
+    const isFollowing = followingSet.has(profileUid);
+    if (followBtn) {
+      followBtn.textContent = isFollowing ? 'Following' : 'Follow';
+      followBtn.className = `profile-action-btn-main ${isFollowing ? 'following' : ''}`;
+      if (isFollowing) {
+        followBtn.style.background = 'rgba(255,255,255,0.1)';
+        followBtn.style.border = '1px solid rgba(255,255,255,0.1)';
+      } else {
+        followBtn.style.background = 'var(--accent)';
+        followBtn.style.border = 'none';
+      }
+    }
+
+    // Stats
+    document.getElementById('stat-followers').textContent = userDetails.followers || 0;
+    document.getElementById('stat-following').textContent = userDetails.following || 0;
+    const userMedia = userDetails.media || [];
+    document.getElementById('stat-media').textContent = userMedia.length;
+
+    renderMediaGallery(userMedia, false);
+  }
+}
+
+function goBackFromProfile() {
+  activeProfileUid = null;
+  showTab(previousView || 'chats');
+}
+
+function openSettingsModal() {
+  const modal = document.getElementById('settings-modal');
+  if (!modal) return;
+  modal.classList.add('active');
+  
+  document.getElementById('edit-display-name').value = userProfile.name || '';
+  document.getElementById('edit-username').value = userProfile.username || '';
+  document.getElementById('edit-bio').value = userProfile.bio || '';
+  
+  const status = userProfile.status || 'online';
+  ['online', 'busy', 'away'].forEach(s => {
+    const btn = document.getElementById(`modal-status-${s}`);
+    if (btn) btn.classList.toggle('active', s === status);
+  });
+}
+
+function closeSettingsModal() {
+  const modal = document.getElementById('settings-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function toggleFollowFromProfilePage() {
+  if (!activeProfileUid) return;
+  const followBtn = document.getElementById('profile-follow-btn');
+  await toggleFollow(activeProfileUid, followBtn);
+  
+  const isFollowing = followingSet.has(activeProfileUid);
+  if (followBtn) {
+    followBtn.textContent = isFollowing ? 'Following' : 'Follow';
+    if (isFollowing) {
+      followBtn.style.background = 'rgba(255,255,255,0.1)';
+      followBtn.style.border = '1px solid rgba(255,255,255,0.1)';
+    } else {
+      followBtn.style.background = 'var(--accent)';
+      followBtn.style.border = 'none';
+    }
+  }
+}
+
+function startChatFromProfilePage() {
+  if (!activeProfileUid) return;
+  const partner = window.activeProfileData || {};
+  const contactObj = {
+    id: activeProfileUid,
+    name: partner.name || 'Private User',
+    avatar: partner.photo || '👤'
+  };
+  
+  if (!mockContacts.find(c => c.id === activeProfileUid)) {
+    mockContacts.unshift({
+      id: activeProfileUid,
+      name: contactObj.name,
+      avatar: contactObj.avatar,
+      lastMessage: 'Tap to start a secure chat',
+      time: 'Now',
+      unread: 0
+    });
+    renderContacts();
+  }
+  
+  openChat(contactObj);
+}
+
+function renderMediaGallery(mediaArray, isOurs) {
+  const grid = document.getElementById('profile-gallery-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  if (isOurs) {
+    const uploadTile = document.createElement('div');
+    uploadTile.className = 'gallery-item gallery-item-upload';
+    uploadTile.onclick = () => document.getElementById('media-upload-input').click();
+    uploadTile.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>Add Media</span>
+    `;
+    grid.appendChild(uploadTile);
+
+    let inputEl = document.getElementById('media-upload-input');
+    if (!inputEl) {
+      inputEl = document.createElement('input');
+      inputEl.type = 'file';
+      inputEl.id = 'media-upload-input';
+      inputEl.accept = 'image/*,video/*';
+      inputEl.style.display = 'none';
+      inputEl.onchange = handleMediaUpload;
+      document.body.appendChild(inputEl);
+    }
+  }
+
+  if (!mediaArray || mediaArray.length === 0) {
+    if (!isOurs) {
+      grid.innerHTML = '<div style="padding:40px; text-align:center; color:var(--text-secondary); font-size:0.85rem; grid-column: 1 / span 3;">No photos or videos shared yet</div>';
+    }
+    return;
+  }
+
+  const sortedMedia = [...mediaArray].sort((a, b) => b.timestamp - a.timestamp);
+  sortedMedia.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'gallery-item';
+    card.onclick = () => viewMedia(item.url, item.type);
+
+    if (item.type === 'video') {
+      card.innerHTML = `
+        <video src="${item.url}" muted playsinline></video>
+        <div class="gallery-video-badge">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          Video
+        </div>
+      `;
+    } else {
+      card.innerHTML = `<img src="${item.url}" loading="lazy">`;
+    }
+
+    if (isOurs) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'gallery-item-delete';
+      delBtn.innerHTML = '&times;';
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteMedia(item.url);
+      };
+      card.appendChild(delBtn);
+    }
+
+    grid.appendChild(card);
+  });
+}
+
+async function handleMediaUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const mySession = window.mySessionData || {};
+  const myUid = mySession.uid;
+  if (!myUid) {
+    showSettingToast('You must be signed in to upload media.');
+    return;
+  }
+
+  showSettingToast('Uploading media to profile...');
+
+  try {
+    const storageRef = storage.ref();
+    const mediaRef = storageRef.child(`profile_media/${myUid}/${Date.now()}_${file.name}`);
+    await mediaRef.put(file);
+    const downloadUrl = await mediaRef.getDownloadURL();
+
+    const type = file.type.startsWith('video/') ? 'video' : 'image';
+    const newMediaItem = {
+      url: downloadUrl,
+      type: type,
+      timestamp: Date.now()
+    };
+
+    if (!userProfile.media) userProfile.media = [];
+    userProfile.media.push(newMediaItem);
+
+    await saveProfileToStorage();
+
+    if (db) {
+      const userRef = db.collection('users').doc(myUid);
+      await userRef.set({
+        media: userProfile.media
+      }, { merge: true });
+    }
+
+    loadProfilePage();
+    showSettingToast('✓ Media added successfully!');
+  } catch (err) {
+    console.error("Media upload failed:", err);
+    showSettingToast('Upload failed: ' + err.message);
+  }
+}
+
+async function deleteMedia(url) {
+  if (!confirm('Are you sure you want to delete this media item from your profile?')) return;
+
+  const mySession = window.mySessionData || {};
+  const myUid = mySession.uid;
+  if (!myUid) return;
+
+  showSettingToast('Deleting media...');
+
+  try {
+    if (userProfile.media) {
+      userProfile.media = userProfile.media.filter(item => item.url !== url);
+    }
+
+    await saveProfileToStorage();
+
+    if (db) {
+      const userRef = db.collection('users').doc(myUid);
+      await userRef.set({
+        media: userProfile.media
+      }, { merge: true });
+    }
+
+    try {
+      const storageRef = storage.refFromURL(url);
+      await storageRef.delete();
+    } catch (e) {
+      console.warn("Storage deletion warning:", e);
+    }
+
+    loadProfilePage();
+    showSettingToast('✓ Media deleted.');
+  } catch (err) {
+    console.error("Deletion failed:", err);
+    showSettingToast('Failed to delete: ' + err.message);
+  }
+}
+
+function viewMedia(url, type) {
+  const modal = document.getElementById('media-viewer-modal');
+  const container = modal.querySelector('.media-viewer-content');
+  if (!modal || !container) return;
+
+  container.innerHTML = '';
+  if (type === 'video') {
+    container.innerHTML = `<video src="${url}" controls autoplay style="max-width: 100%; max-height: 80vh; border-radius: 8px;"></video>`;
+  } else {
+    container.innerHTML = `<img src="${url}" style="max-width: 100%; max-height: 80vh; border-radius: 8px; object-fit: contain;">`;
+  }
+
+  modal.classList.add('active');
+}
+
+function closeMediaViewer() {
+  const modal = document.getElementById('media-viewer-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    const container = modal.querySelector('.media-viewer-content');
+    if (container) container.innerHTML = '';
+  }
 }
 
 function renderFollowRequests() {
@@ -3145,11 +3529,9 @@ function acceptFollowRequest(requestId) {
     const user = followRequests[idx].user;
     followRequests.splice(idx, 1);
 
-    // Add to followers count (mock)
     const followersEl = document.getElementById('stat-followers');
     if (followersEl) followersEl.textContent = parseInt(followersEl.textContent) + 1;
 
-    // Add to chat list if not already there
     if (!mockContacts.find(c => c.id === user.id)) {
       mockContacts.unshift({
         id: user.id,
@@ -3177,52 +3559,14 @@ function ignoreFollowRequest(requestId) {
   }
 }
 
-// Trigger simulation after app loads
-// (Removed Antigravity simulation)
-
-function openProfileEditModal() {
-  document.getElementById('profile-edit-modal').style.display = 'flex';
-  document.getElementById('edit-profile-name').value = userProfile.name;
-  document.getElementById('edit-profile-bio').value = userProfile.bio;
-}
-
-function closeProfileEditModal() {
-  document.getElementById('profile-edit-modal').style.display = 'none';
-}
-
-function saveProfileEdits() {
-  const newName = document.getElementById('edit-profile-name').value.trim();
-  const newBio = document.getElementById('edit-profile-bio').value.trim();
-
-  if (newName) userProfile.name = newName;
-  userProfile.bio = newBio;
-
-  saveProfileToStorage().then(() => {
-    loadProfilePage();
-    closeProfileEditModal();
-    showSettingToast('Profile updated successfully');
-  });
-}
-
-function updateProfileStats() {
-  document.getElementById('stat-following').textContent = followingSet.size;
-  document.getElementById('stat-chats').textContent = mockContacts.length;
-
-  // Followers: Use a fixed random number stored in session if not present
-  const session = window.mySessionData || {};
-  if (!session.mockFollowers) {
-    session.mockFollowers = Math.floor(Math.random() * 50 + 10);
-    encryptData(session).then(enc => {
-      localStorage.setItem('privateai_session', enc);
-    });
-  }
-  document.getElementById('stat-followers').textContent = session.mockFollowers;
-}
-
 function setStatus(status, save = true) {
   userProfile.status = status;
   ['online', 'busy', 'away'].forEach(s => {
-    document.getElementById(`status-${s}`).classList.toggle('active', s === status);
+    const mainBtn = document.getElementById(`status-${s}`);
+    if (mainBtn) mainBtn.classList.toggle('active', s === status);
+    
+    const modalBtn = document.getElementById(`modal-status-${s}`);
+    if (modalBtn) modalBtn.classList.toggle('active', s === status);
   });
   if (save) saveProfileToStorage();
 }
@@ -3349,6 +3693,16 @@ window.filterDiscover = filterDiscover;
 window.openOtherProfile = openOtherProfile;
 window.startChatFromProfile = startChatFromProfile;
 window.openUserListModal = openUserListModal;
+window.openSettingsModal = openSettingsModal;
+window.closeSettingsModal = closeSettingsModal;
+window.goBackFromProfile = goBackFromProfile;
+window.toggleFollowFromProfilePage = toggleFollowFromProfilePage;
+window.startChatFromProfilePage = startChatFromProfilePage;
+window.handleMediaUpload = handleMediaUpload;
+window.deleteMedia = deleteMedia;
+window.viewMedia = viewMedia;
+window.closeMediaViewer = closeMediaViewer;
+window.setStatus = setStatus;
 
 // Start App — check auth first
 window.onload = () => {
