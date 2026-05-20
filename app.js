@@ -3224,15 +3224,10 @@ function saveProfile() {
 
   userProfile = { ...userProfile, name, username, bio };
 
-  document.getElementById('profile-display-name').textContent = name;
-  document.getElementById('profile-username').textContent = username;
-
-  // Update avatar initial
-  const avatarEl = document.getElementById('profile-avatar-display');
-  if (!userProfile.avatarUrl) avatarEl.textContent = name.charAt(0).toUpperCase();
-
-  saveProfileToStorage();
-  showSettingToast('✓ Profile saved successfully!');
+  saveProfileToStorage().then(() => {
+    loadProfilePage();
+    showSettingToast('✓ Profile saved successfully!');
+  });
 }
 
 async function saveProfileToStorage() {
