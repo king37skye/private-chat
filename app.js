@@ -2415,15 +2415,27 @@ async function syncUserProfileToCloud(user) {
   if (!db || !user) return;
   try {
     const userRef = db.collection('users').doc(user.uid);
-    // Explicitly omitting 'email' to preserve zero-knowledge identity separation
-    
     let publicKeyObj = localStorage.getItem('privateai_ecdh_public_' + user.uid) || null;
+
+    const myUid = user.uid;
+    const encProfile = localStorage.getItem('privateai_profile_' + myUid);
+    let localProfile = {};
+    if (encProfile) {
+      try {
+        localProfile = await decryptData(encProfile);
+      } catch (e) {}
+    }
+
+    const name = localProfile.name || user.name || 'User';
+    const handle = (localProfile.username || ('@' + (user.email ? user.email.split('@')[0] : user.uid.slice(0, 5)))).toLowerCase();
+    const bio = localProfile.bio || 'Encrypted space of a private user.';
 
     await userRef.set({
       uid: user.uid,
-      name: user.name || 'User',
-      photo: user.photo || '',
-      handle: '@' + (user.email ? user.email.split('@')[0] : user.uid.slice(0, 5)),
+      name: name,
+      photo: localProfile.avatarUrl || user.photo || '',
+      handle: handle,
+      bio: bio,
       publicKey: publicKeyObj,
       lastActive: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
@@ -2462,7 +2474,7 @@ async function fetchRealDiscoverUsers() {
           id: data.uid,
           name: data.name,
           handle: data.handle,
-          bio: 'Real User on Private AI',
+          bio: data.bio || 'Real User on Private AI',
           avatar: data.photo || '👤',
           color: '#5E5CE6',
           followers: 0,
@@ -3215,19 +3227,60 @@ function setStatus(status, save = true) {
   if (save) saveProfileToStorage();
 }
 
-function saveProfile() {
+async function saveProfile() {
   const name = document.getElementById('edit-display-name').value.trim();
   const username = document.getElementById('edit-username').value.trim();
   const bio = document.getElementById('edit-bio').value.trim();
 
   if (!name) { showSettingToast('Name cannot be empty.'); return; }
+  if (!username) { showSettingToast('Username cannot be empty.'); return; }
 
-  userProfile = { ...userProfile, name, username, bio };
+  // Enforce username format: remove leading @ if user typed it, check alphanumeric + underscores, 3-15 chars
+  const cleanUsername = username.replace(/^@/, '');
+  const usernameRegex = /^[a-zA-Z0-9_]{3,15}$/;
+  if (!usernameRegex.test(cleanUsername)) {
+    showSettingToast('Username must be 3-15 characters, containing only letters, numbers, and underscores.');
+    return;
+  }
 
-  saveProfileToStorage().then(() => {
-    loadProfilePage();
-    showSettingToast('✓ Profile saved successfully!');
-  });
+  const targetHandle = '@' + cleanUsername.toLowerCase();
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+
+  // Check if username is taken in Firestore
+  if (db && myUid !== 'default') {
+    try {
+      showSettingToast('Checking username availability...');
+      const handleQuery = await db.collection('users')
+        .where('handle', '==', targetHandle)
+        .get();
+
+      let taken = false;
+      handleQuery.forEach(doc => {
+        if (doc.id !== myUid) taken = true;
+      });
+
+      if (taken) {
+        showSettingToast('Username is already taken by another user.');
+        return;
+      }
+    } catch (err) {
+      console.error("Unique handle validation failed:", err);
+      showSettingToast('Uniqueness check failed. Please check connection.');
+      return;
+    }
+  }
+
+  userProfile = { ...userProfile, name, username: targetHandle, bio };
+
+  await saveProfileToStorage();
+
+  // Sync to cloud Firestore immediately!
+  if (window.mySessionData) {
+    await syncUserProfileToCloud(window.mySessionData);
+  }
+
+  loadProfilePage();
+  showSettingToast('✓ Profile saved successfully!');
 }
 
 async function saveProfileToStorage() {
