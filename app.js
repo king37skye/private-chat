@@ -600,6 +600,13 @@ async function decryptFile(arrayBuffer, customKeyMaterial = null, ecdhSharedKey 
   }
 }
 
+function getProxiedUrl(url) {
+  if (url && url.startsWith('https://firebasestorage.googleapis.com/')) {
+    return '/api/proxy-file?url=' + encodeURIComponent(url);
+  }
+  return url;
+}
+
 async function downloadAndDecryptFile(msgId, url, filename, mimeType, partnerId, autoDisplay = false) {
   try {
     const el = document.getElementById(`decrypt_${msgId}`);
@@ -611,7 +618,7 @@ async function downloadAndDecryptFile(msgId, url, filename, mimeType, partnerId,
       }
     }
 
-    const response = await fetch(url);
+    const response = await fetch(getProxiedUrl(url));
     const encryptedArrayBuffer = await response.arrayBuffer();
 
     let decryptedBuffer;
@@ -990,7 +997,7 @@ async function openTransferView(msgIdOrFile, isUpload = false, fileDetails = nul
           updateTransferCircleProgress(10, "Fetching secure payload...");
 
           // Progressive stream download for accuracy!
-          const response = await fetch(msg.file.url);
+          const response = await fetch(getProxiedUrl(msg.file.url));
           const contentLength = response.headers.get('content-length');
           const total = contentLength ? parseInt(contentLength, 10) : 0;
           let loaded = 0;
