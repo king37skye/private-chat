@@ -3383,6 +3383,7 @@ async function handleMediaUpload(event) {
   showSettingToast('Uploading media to profile...');
 
   try {
+    const storage = firebase.storage();
     const storageRef = storage.ref();
     const mediaRef = storageRef.child(`profile_media/${myUid}/${Date.now()}_${file.name}`);
     await mediaRef.put(file);
@@ -3439,6 +3440,7 @@ async function deleteMedia(url) {
     }
 
     try {
+      const storage = firebase.storage();
       const storageRef = storage.refFromURL(url);
       await storageRef.delete();
     } catch (e) {
