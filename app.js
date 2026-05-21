@@ -2429,12 +2429,19 @@ async function initLocalAI() {
     if (!hasGpu) {
       throw new Error("WebGPU is not supported or disabled on this browser.");
     }
+    
     if (!window.webllm) {
-      throw new Error("WebLLM library failed to load.");
+      const mlc = await import("https://esm.run/@mlc-ai/web-llm");
+      window.webllm = mlc;
     }
 
     const modelId = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-    localAIEngine = await window.webllm.CreateEngine(modelId, {
+    const creatorFn = window.webllm.CreateMLCEngine || window.webllm.CreateEngine;
+    if (!creatorFn) {
+      throw new Error("CreateMLCEngine function not found in WebLLM library.");
+    }
+
+    localAIEngine = await creatorFn(modelId, {
       initProgressCallback: (report) => {
         console.log("WebLLM initialization progress:", report.text, report.progress);
         const fill = document.getElementById('ai-loading-progress');
