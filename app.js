@@ -402,6 +402,15 @@ let currentMainTab = 'chats'; // 'chats' or 'ais'
 let currentActiveAI = null; // Track if we are chatting with an AI profile
 let followingSet = new Set();
 
+// AI Smart Hybrid Routing & Local WebGPU Engine Variables
+let aiRoutingMode = localStorage.getItem('privateai_ai_routing_mode') || 'auto';
+let localAIEngine = null;
+let localAIInitialized = false;
+let localAIInitializing = false;
+let localAIDeviceChecked = false;
+let localAICompatible = false;
+const dailyCloudQuotaLimit = 20;
+
 // Mock Contacts Data
 const mockContacts = [];
 
@@ -1388,7 +1397,13 @@ function openChat(profile, isAIProfile = false) {
   currentActiveChatId = profile.id;
   currentActiveAI = isAIProfile ? profile : null;
   navTitle.textContent = profile.name;
-  document.getElementById('nav-subtitle').style.display = isAIProfile ? 'none' : 'block';
+  
+  if (isAIProfile) {
+    updateAiSubtitle();
+  } else {
+    document.getElementById('nav-subtitle').style.display = 'block';
+    document.getElementById('nav-subtitle').textContent = 'Online';
+  }
 
   backBtn.style.display = 'flex';
   
@@ -1406,6 +1421,13 @@ function openChat(profile, isAIProfile = false) {
     aiContainer.style.display = 'flex';
     inputField.placeholder = "Ask " + profile.name;
     sendBtn.classList.add('ai-mode');
+    
+    // Trigger local AI initialization if needed
+    if (aiRoutingMode === 'local' || aiRoutingMode === 'auto') {
+      if (!localAIInitialized && !localAIInitializing) {
+        initLocalAI();
+      }
+    }
   } else {
     chatContainer.style.display = 'flex';
     aiContainer.style.display = 'none';
@@ -2326,8 +2348,168 @@ function shareWithAI() {
   }, 50);
 }
 
-// Real AI Processing via Secure Backend
-async function processAIQuery(prompt, aiId) {
+// AI Smart Hybrid Routing & Quota Management Helper Functions
+function setAiRoutingMode(mode) {
+  aiRoutingMode = mode;
+  localStorage.setItem('privateai_ai_routing_mode', mode);
+  showSettingToast("AI Routing Mode: " + mode.toUpperCase());
+  
+  if (currentActiveAI) {
+    updateAiSubtitle();
+    if (mode === 'local' || mode === 'auto') {
+      if (!localAIInitialized && !localAIInitializing) {
+        initLocalAI();
+      }
+    } else {
+      // If cloud was forced, hide loading banner if it was active
+      const banner = document.getElementById('ai-loading-banner');
+      if (banner) banner.style.display = 'none';
+    }
+  }
+}
+
+async function checkWebGPUSupport() {
+  if (localAIDeviceChecked) return localAICompatible;
+  localAIDeviceChecked = true;
+  if (!navigator.gpu) {
+    localAICompatible = false;
+    return false;
+  }
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    localAICompatible = !!adapter;
+    return localAICompatible;
+  } catch (e) {
+    localAICompatible = false;
+    return false;
+  }
+}
+
+function getDailyCloudUsage() {
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+  const today = new Date().toISOString().split('T')[0];
+  const storageVal = localStorage.getItem(`privateai_cloud_usage_${myUid}`);
+  if (storageVal) {
+    try {
+      const parsed = JSON.parse(storageVal);
+      if (parsed.date === today) {
+        return parsed.count || 0;
+      }
+    } catch (e) {
+      console.error("Failed to parse daily cloud usage:", e);
+    }
+  }
+  return 0;
+}
+
+function incrementDailyCloudUsage() {
+  const myUid = (window.mySessionData && window.mySessionData.uid) || 'default';
+  const today = new Date().toISOString().split('T')[0];
+  const newCount = getDailyCloudUsage() + 1;
+  localStorage.setItem(`privateai_cloud_usage_${myUid}`, JSON.stringify({ count: newCount, date: today }));
+  
+  if (db && firebase.auth().currentUser) {
+    db.collection('users').doc(myUid).set({
+      cloudUsage: { count: newCount, date: today }
+    }, { merge: true }).catch(err => console.error("Cloud quota sync failed:", err));
+  }
+  updateAiSubtitle();
+}
+
+async function initLocalAI() {
+  if (localAIInitialized || localAIInitializing) return;
+  localAIInitializing = true;
+  updateAiSubtitle();
+
+  const banner = document.getElementById('ai-loading-banner');
+  if (banner) banner.style.display = 'block';
+
+  try {
+    const hasGpu = await checkWebGPUSupport();
+    if (!hasGpu) {
+      throw new Error("WebGPU is not supported or disabled on this browser.");
+    }
+    if (!window.webllm) {
+      throw new Error("WebLLM library failed to load.");
+    }
+
+    const modelId = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+    localAIEngine = await window.webllm.CreateEngine(modelId, {
+      initProgressCallback: (report) => {
+        console.log("WebLLM initialization progress:", report.text, report.progress);
+        const fill = document.getElementById('ai-loading-progress');
+        const statusText = document.getElementById('ai-loading-status');
+        if (fill) {
+          fill.style.width = (report.progress * 100) + '%';
+          fill.textContent = Math.round(report.progress * 100) + '%';
+        }
+        if (statusText) statusText.textContent = report.text;
+        
+        if (report.progress === 1) {
+          setTimeout(() => {
+            if (banner) banner.style.display = 'none';
+          }, 2000);
+        }
+      }
+    });
+
+    localAIInitialized = true;
+    localAIInitializing = false;
+    updateAiSubtitle();
+    showSettingToast("On-Device AI ready!");
+  } catch (err) {
+    console.error("Local AI Engine init failed:", err);
+    localAIInitializing = false;
+    localAIInitialized = false;
+    if (banner) banner.style.display = 'none';
+    
+    if (aiRoutingMode === 'local') {
+      showSettingToast("On-Device AI failed: " + err.message);
+    } else {
+      showSettingToast("On-Device AI unsupported. Using Secure Cloud Fallback.");
+    }
+    updateAiSubtitle();
+  }
+}
+
+function updateAiSubtitle() {
+  const subtitle = document.getElementById('nav-subtitle');
+  if (!subtitle) return;
+  
+  if (currentActiveAI) {
+    subtitle.style.display = 'block';
+    if (aiRoutingMode === 'local') {
+      if (localAIInitialized) {
+        subtitle.textContent = "🟢 On-Device Qwen 0.5B (Active)";
+      } else if (localAIInitializing) {
+        subtitle.textContent = "⏳ Loading Qwen 0.5B...";
+      } else {
+        subtitle.textContent = "🔒 On-Device Qwen 0.5B (Inactive)";
+      }
+    } else if (aiRoutingMode === 'cloud') {
+      const remaining = dailyCloudQuotaLimit - getDailyCloudUsage();
+      subtitle.textContent = `☁️ Cloud AI (${remaining > 0 ? remaining : 0} / ${dailyCloudQuotaLimit} left)`;
+    } else {
+      // Smart Auto
+      if (localAIInitialized) {
+        subtitle.textContent = "🟢 On-Device Qwen 0.5B";
+      } else if (localAIInitializing) {
+        subtitle.textContent = "⏳ Loading On-Device Qwen...";
+      } else {
+        const remaining = dailyCloudQuotaLimit - getDailyCloudUsage();
+        subtitle.textContent = `⚡ Smart Auto (Cloud: ${remaining > 0 ? remaining : 0} left)`;
+      }
+    }
+  }
+}
+
+async function runCloudAIQuery(prompt) {
+  const cloudUsage = getDailyCloudUsage();
+  if (cloudUsage >= dailyCloudQuotaLimit) {
+    deliverAIResponse(`Cloud usage limit reached (${dailyCloudQuotaLimit}/${dailyCloudQuotaLimit} messages). Please open Settings (button at top of profile page) and switch AI Routing Mode to "On-Device Only" to chat for free, or try again tomorrow.`, "Limit Reached");
+    return;
+  }
+
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
@@ -2343,10 +2525,64 @@ async function processAIQuery(prompt, aiId) {
     }
 
     const data = await response.json();
+    incrementDailyCloudUsage();
     deliverAIResponse(data.text, "Secure Cloud");
   } catch (err) {
-    console.error("AI secure-bridge failed, using local offline fallback:", err);
-    deliverAIResponse("I'm sorry, my secure Vercel cloud bridge encountered an error. Please make sure GEMINI_API_KEY is configured in your Vercel project environment settings. Error details: " + err.message, "Offline Fallback");
+    console.error("AI cloud bridge failed:", err);
+    deliverAIResponse("I'm sorry, my secure cloud bridge encountered an error: " + err.message, "Offline Fallback");
+  }
+}
+
+// Routed AI Processing Engine
+async function processAIQuery(prompt, aiId) {
+  let useCloud = false;
+  if (aiRoutingMode === 'cloud') {
+    useCloud = true;
+  } else if (aiRoutingMode === 'local') {
+    useCloud = false;
+  } else {
+    // Smart Auto: Use cloud if local GPU is not initialized/supported
+    useCloud = !localAIInitialized;
+  }
+
+  if (!useCloud) {
+    if (!localAIInitialized) {
+      if (aiRoutingMode === 'local') {
+        deliverAIResponse("On-Device AI is still loading model weights (~350MB). Please wait for initialization to complete.", "On-Device Offline");
+        return;
+      } else {
+        // Auto mode falls back to cloud if local model is not loaded yet
+        useCloud = true;
+      }
+    }
+  }
+
+  if (!useCloud) {
+    // Local WebLLM Execution
+    try {
+      typingIndicator.classList.add('active');
+      if (!aiContainer.contains(typingIndicator)) {
+        aiContainer.appendChild(typingIndicator);
+      }
+      scrollToBottom(aiContainer);
+
+      const reply = await localAIEngine.chat.completions.create({
+        messages: [{ role: "user", content: prompt }]
+      });
+
+      const replyText = reply.choices[0].message.content || "I am sorry, I could not process that locally.";
+      deliverAIResponse(replyText, "Local Process");
+    } catch (err) {
+      console.error("Local inference failed, falling back to Cloud:", err);
+      if (aiRoutingMode === 'local') {
+        deliverAIResponse("On-Device inference error: " + err.message, "Local Failure");
+      } else {
+        await runCloudAIQuery(prompt);
+      }
+    }
+  } else {
+    // Cloud Execution
+    await runCloudAIQuery(prompt);
   }
 }
 
@@ -3253,6 +3489,9 @@ function openSettingsModal() {
     const btn = document.getElementById(`modal-status-${s}`);
     if (btn) btn.classList.toggle('active', s === status);
   });
+
+  const routingSelect = document.getElementById('ai-routing-select');
+  if (routingSelect) routingSelect.value = aiRoutingMode;
 }
 
 function closeSettingsModal() {
@@ -3705,6 +3944,7 @@ window.deleteMedia = deleteMedia;
 window.viewMedia = viewMedia;
 window.closeMediaViewer = closeMediaViewer;
 window.setStatus = setStatus;
+window.setAiRoutingMode = setAiRoutingMode;
 
 // Start App — check auth first
 window.onload = () => {

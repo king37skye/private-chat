@@ -347,7 +347,16 @@
         </div>
 
         <!-- AI Chat Area -->
-        <div class="chat-container" id="ai-container" style="display: none;">
+        <div class="chat-container" id="ai-container" style="display: none; flex-direction: column;">
+          <!-- Local Model Loading Progress Banner -->
+          <div class="ai-loading-banner" id="ai-loading-banner" style="display: none; width: calc(100% - 32px); margin: 16px auto; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 14px 16px; box-sizing: border-box;">
+            <div class="ai-loading-title" id="ai-loading-title" style="font-size: 0.85rem; font-weight: 600; color: #fff; margin-bottom: 8px;">Initializing On-Device AI (Qwen 0.5B)...</div>
+            <div class="ai-loading-bar-bg" style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; margin-bottom: 6px; position: relative;">
+              <div class="ai-loading-bar-fill" id="ai-loading-progress" style="width: 0%; height: 100%; background: linear-gradient(90deg, #32ADE6, #5E5CE6); border-radius: 4px; transition: width 0.3s ease; text-align: right; font-size: 0.65rem; color: #fff; line-height: 8px; font-weight: bold; padding-right: 4px;"></div>
+            </div>
+            <div class="ai-loading-status" id="ai-loading-status" style="font-size: 0.7rem; color: var(--text-tertiary);">Checking device capabilities...</div>
+          </div>
+
           <div class="message-bubble message-ai" style="animation-delay: 0s;">
             Hello. I am your isolated AI assistant. My processing is confined to this sandbox. I cannot read your private chats unless you explicitly share a message with me.
             <span class="timestamp">Local Process</span>
@@ -482,6 +491,21 @@
               <button class="status-pill active" id="modal-status-online" onclick="setStatus('online')">🟢 Online</button>
               <button class="status-pill" id="modal-status-busy" onclick="setStatus('busy')">🔴 Busy</button>
               <button class="status-pill" id="modal-status-away" onclick="setStatus('away')">🟡 Away</button>
+            </div>
+          </div>
+
+          <!-- AI Routing Mode -->
+          <div class="auth-field" style="margin-bottom:20px;">
+            <label class="auth-label" style="display:block; font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">AI Routing Mode</label>
+            <div class="profile-status-row" style="display:flex; flex-direction:column; gap:8px;">
+              <select id="ai-routing-select" onchange="setAiRoutingMode(this.value)" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:10px; color:#fff; font-size:0.9rem; outline: none; cursor: pointer;">
+                <option value="auto" style="background:#1d1d1f;">⚡ Smart Hybrid (Auto WebGPU / Cloud)</option>
+                <option value="local" style="background:#1d1d1f;">🔒 On-Device Only (Maximum Privacy)</option>
+                <option value="cloud" style="background:#1d1d1f;">☁️ Cloud Only (Gemini 2.0 Flash)</option>
+              </select>
+              <div id="ai-routing-desc" style="font-size:0.75rem; color:var(--text-tertiary); margin-top:2px; line-height: 1.3;">
+                Smart Hybrid automatically uses local WebGPU on-device model when available, falling back to secure Cloud API if unsupported.
+              </div>
             </div>
           </div>
 
@@ -688,6 +712,7 @@
     </button>
   </nav>
 
+  <script src="https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/lib/index.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="call.js"></script>
   <script src="app.js"></script>
